@@ -44,7 +44,7 @@ enemy_speed = 2
 enemy_bullet_speed = 5
 enemies = []
 enemy_direction = 1
-enemy_shoot_prob = 0.003
+enemy_shoot_prob = 0.01  # Adjusted shooting probability
 enemy_bullets = []
 
 # Game variables
@@ -170,7 +170,7 @@ def update_enemies():
 def update_bullets():
     for bullet in bullets:
         bullet[1] -= bullet_speed
-        pygame.draw.rect(screen, RED, (bullet[0], bullet[1], bullet_width, bullet_height))
+        pygame.draw.rect(screen, GREEN, (bullet[0], bullet[1], bullet_width, bullet_height))
 
         if bullet[1] < 0:
             bullets.remove(bullet)
@@ -186,7 +186,7 @@ def update_enemy_bullets():
 
     for bullet in enemy_bullets:
         bullet[1] += enemy_bullet_speed
-        pygame.draw.rect(screen, YELLOW, (bullet[0], bullet[1], bullet_width, bullet_height))
+        pygame.draw.rect(screen, RED, (bullet[0], bullet[1], bullet_width, bullet_height))
 
         if bullet[1] > screen_height:
             enemy_bullets.remove(bullet)
@@ -195,6 +195,13 @@ def update_enemy_bullets():
             enemy_bullets.remove(bullet)
             player_lives -= 1
             ask_cybersecurity_question()
+
+def enemy_shoot():
+    if enemies and random.random() < enemy_shoot_prob:  # Randomly shoot based on the probability
+        enemy = random.choice(enemies)
+        bullet_x = enemy[0] + enemy_width // 2 - bullet_width // 2
+        bullet_y = enemy[1] + enemy_height
+        enemy_bullets.append([bullet_x, bullet_y])
 
 def display_info():
     level_text = font.render(f"Level: {level}/{total_levels}", True, WHITE)
@@ -292,6 +299,7 @@ def main_game():
 
         update_bullets()
         update_enemy_bullets()
+        enemy_shoot()  # Call to check if enemies should shoot
         draw_player(player_x, player_y)
         update_enemies()
         draw_enemies()
