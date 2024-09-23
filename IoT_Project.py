@@ -1,8 +1,14 @@
 import pygame
 import random
+import RPi.GPIO as GPIO
 
 # Initialize Pygame
 pygame.init()
+
+# GPIO setup
+GPIO.setmode(GPIO.BCM)
+GREEN_LED_PIN = 4  # GPIO pin 4 for the green LED
+GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
 
 # Screen dimensions
 screen_width = 800
@@ -64,71 +70,24 @@ enemy_image = pygame.image.load("enemy.png").convert_alpha()
 player_image = pygame.transform.scale(player_image, (player_width, player_height))
 enemy_image = pygame.transform.scale(enemy_image, (enemy_width, enemy_height))
 
-def ask_cybersecurity_question():
-    global player_lives, current_question, current_answers, correct_answer
+def update_bullets():
+    for bullet in bullets:
+        bullet[1] -= bullet_speed
+        pygame.draw.rect(screen, GREEN, (bullet[0], bullet[1], bullet_width, bullet_height))
 
-    questions = [
-        ("What is a strong password?", ['a) A mix of letters, numbers, and symbols', 'b) Just letters', 'c) Just numbers'], 'a'),
-        ("What should you do if you receive a suspicious email?", ['a) Report it', 'b) Click the links', 'c) Ignore it'], 'a'),
-        ("How often should you change your passwords?", ['a) Every 6 months', 'b) Every year', 'c) Never'], 'a'),
-        ("What is two-factor authentication?", ['a) A second form of verification', 'b) A backup email', 'c) A longer password'], 'a')
-    ]
+        if bullet[1] < 0:
+            bullets.remove(bullet)
 
-    question, answers, correct = random.choice(questions)
-    current_question = (question, answers)
-    current_answers = answers
-    correct_answer = correct
+        for enemy in enemies:
+            if enemy[0] < bullet[0] < enemy[0] + enemy_width and enemy[1] < bullet[1] < enemy[1] + enemy_height:
+                bullets.remove(bullet)
+                enemies.remove(enemy)
 
-    screen.fill(BLACK)
-    question_text = big_font.render(question, True, WHITE)
-    screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, screen_height // 2 - 100))
-    
-    for i, ans in enumerate(answers):
-        answer_text = font.render(ans, True, WHITE)
-        screen.blit(answer_text, (screen_width // 2 - answer_text.get_width() // 2, screen_height // 2 + i * 40))
-    
-    pygame.display.flip()
-
-    input_answer = ""
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    if input_answer == correct_answer:
-                        display_feedback("Correct", GREEN)
-                        player_lives += 1
-                    else:
-                        display_feedback("Incorrect", RED)
-                    return
-                elif event.key == pygame.K_BACKSPACE:
-                    input_answer = input_answer[:-1]
-                elif event.key in (pygame.K_a, pygame.K_b, pygame.K_c):
-                    input_answer = event.unicode
-                elif event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    quit()
-
-        screen.fill(BLACK)
-        question_text = big_font.render(current_question[0], True, WHITE)
-        screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, screen_height // 2 - 100))
-        
-        for i, ans in enumerate(current_answers):
-            answer_text = font.render(ans, True, WHITE)
-            screen.blit(answer_text, (screen_width // 2 - answer_text.get_width() // 2, screen_height // 2 + i * 40))
-        
-        input_text = font.render(f"Your Answer: {input_answer}", True, WHITE)
-        screen.blit(input_text, (screen_width // 2 - input_text.get_width() // 2, screen_height // 2 + len(current_answers) * 40 + 50))
-        pygame.display.flip()
-
-def display_feedback(message, color):
-    screen.fill(BLACK)
-    feedback_text = bold_font.render(message, True, color)
-    screen.blit(feedback_text, (screen_width // 2 - feedback_text.get_width() // 2, screen_height // 2 - feedback_text.get_height() // 2))
-    pygame.display.flip()
-    pygame.time.wait(2000)
+                # Turn on the green LED when an enemy is hit
+                GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
+                pygame.time.delay(500)  # Wait for 500 milliseconds
+                GPIO.output(GREEN_LED_PIN, GPIO.LOW)
+                break
 
 def draw_player(x, y):
     screen.blit(player_image, (x, y))
@@ -151,7 +110,7 @@ def update_enemies():
     if not enemies:
         return
 
-    edge_reached = False  # Initialize edge_reached here
+    edge_reached = False
 
     for enemy in enemies:
         enemy[0] += enemy_speed * enemy_direction
@@ -167,20 +126,6 @@ def update_enemies():
             enemy[1] += 20
         enemy_direction *= -1
 
-def update_bullets():
-    for bullet in bullets:
-        bullet[1] -= bullet_speed
-        pygame.draw.rect(screen, GREEN, (bullet[0], bullet[1], bullet_width, bullet_height))
-
-        if bullet[1] < 0:
-            bullets.remove(bullet)
-
-        for enemy in enemies:
-            if enemy[0] < bullet[0] < enemy[0] + enemy_width and enemy[1] < bullet[1] < enemy[1] + enemy_height:
-                bullets.remove(bullet)
-                enemies.remove(enemy)
-                break
-
 def update_enemy_bullets():
     global player_lives
 
@@ -194,7 +139,6 @@ def update_enemy_bullets():
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             enemy_bullets.remove(bullet)
             player_lives -= 1
-            ask_cybersecurity_question()
 
 def enemy_shoot():
     if enemies and random.random() < enemy_shoot_prob:  # Randomly shoot based on the probability
@@ -234,15 +178,6 @@ def splash_screen():
                 quit()
             if event.type == pygame.KEYDOWN:
                 waiting = False
-
-def kong_splash_screen():
-    screen.fill(BLACK)
-    message = big_font.render("Congratulations!", True, GREEN)
-    sub_message = font.render("You've completed all levels of cyber security invaders!", True, WHITE)
-    screen.blit(message, (screen_width // 2 - message.get_width() // 2, screen_height // 2 - 100))
-    screen.blit(sub_message, (screen_width // 2 - sub_message.get_width() // 2, screen_height // 2))
-    pygame.display.flip()
-    pygame.time.wait(2000)
 
 def display_game_over():
     screen.fill(RED)
@@ -299,7 +234,7 @@ def main_game():
 
         update_bullets()
         update_enemy_bullets()
-        enemy_shoot()  # Call to check if enemies should shoot
+        enemy_shoot()
         draw_player(player_x, player_y)
         update_enemies()
         draw_enemies()
@@ -321,8 +256,8 @@ splash_screen()
 main_game()
 
 if space_invaders_completed:
-    kong_splash_screen()
-else:
     display_game_over()
 
+# Clean up GPIO when the game ends
 pygame.quit()
+GPIO.cleanup()
