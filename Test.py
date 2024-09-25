@@ -1,22 +1,18 @@
-# main.py
-import time
-from led import LED
+from gpiozero import LED
+from time import sleep
 
-# Set up LEDs
-green_led = LED(18)  # GPIO pin for green LED
-red_led = LED(17)    # GPIO pin for red LED
+# Set up the LEDs
+green_led = LED(4)  # Green LED on GPIO pin 4
+red_led = LED(17)   # Red LED on GPIO pin 17
 
-# Ask the user how many times to blink
+# Ask the user for the number of times to blink
 num_blinks = int(input("How many times should the LEDs blink? "))
 
-# Blink the LEDs alternately
+# Blink the LEDs
 for _ in range(num_blinks):
-    green_led.on()
-    red_led.off()
-    time.sleep(0.1)  # Fast blink
-    green_led.off()
-    red_led.on()
-    time.sleep(0.1)  # Fast blink
-
-# Clean up GPIO
-LED.cleanup()
+    green_led.on()  # Turn on the green LED
+    red_led.off()   # Turn off the red LED
+    sleep(0.5)      # Wait for 0.5 seconds
+    green_led.off() # Turn off the green LED
+    red_led.on()    # Turn on the red LED
+    sleep(0.5)      # Wait for 0.5 seconds
