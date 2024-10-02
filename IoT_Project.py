@@ -1,4 +1,3 @@
-from tkinter import END
 import pygame
 import random
 from gpiozero import LED
@@ -66,43 +65,35 @@ boss_fight = False
 clock = pygame.time.Clock()
 show_title_screen = True
 
-# Define a list of cybersecurity questions and their multiple-choice options and correct answers
-cybersecurity_questions = [
-    {"question": "What does 'HTTPS' stand for?", 
-     "options": ["A) Hypertext Transfer Protocol Standard", "B) Hypertext Transfer Protocol Secure", "C) High Transfer Protocol Secure"], 
-     "answer": "B"},
-    
-    {"question": "What is a common form of phishing attack?", 
-     "options": ["A) Email", "B) Phone call", "C) USB stick"], 
-     "answer": "A"},
-    
-    {"question": "Which type of malware locks your files and demands payment?", 
-     "options": ["A) Virus", "B) Worm", "C) Ransomware"], 
-     "answer": "C"},
-    
-    {"question": "What is a strong password?", 
-     "options": ["A) Your birthdate", "B) A combination of letters, numbers, and symbols", "C) Your pet's name"], 
-     "answer": "B"},
-    
-    {"question": "What does '2FA' stand for?", 
-     "options": ["A) Two-Factor Authentication", "B) Two-Factor Access", "C) Two-Factor Allowance"], 
-     "answer": "A"}
-]
+# GPIO LED setup
+Green_LED = LED(4)  # GPIO pin 4 for green LED
+Red_LED = LED(17)   # GPIO pin 17 for red LED
+
+# LED flashing state variables
+led_flash_duration = 0.5  # Duration in seconds
+green_led_flash_time = None
+red_led_flash_time = None
 
 def ask_cybersecurity_question():
     """Ask a random cybersecurity question and return True if the answer is correct."""
+    cybersecurity_questions = [
+        {"question": "What does 'HTTPS' stand for?", "options": ["A) Hypertext Transfer Protocol Standard", "B) Hypertext Transfer Protocol Secure", "C) High Transfer Protocol Secure"], "answer": "B"},
+        {"question": "What is a common form of phishing attack?", "options": ["A) Email", "B) Phone call", "C) USB stick"], "answer": "A"},
+        {"question": "Which type of malware locks your files and demands payment?", "options": ["A) Virus", "B) Worm", "C) Ransomware"], "answer": "C"},
+        {"question": "What is a strong password?", "options": ["A) Your birthdate", "B) A combination of letters, numbers, and symbols", "C) Your pet's name"], "answer": "B"},
+        {"question": "What does '2FA' stand for?", "options": ["A) Two-Factor Authentication", "B) Two-Factor Access", "C) Two-Factor Allowance"], "answer": "A"}
+    ]
+    
     question_data = random.choice(cybersecurity_questions)
     question = question_data["question"]
     options = question_data["options"]
     correct_answer = question_data["answer"]
 
-    # Display the question and options
     selected_index = 0
     screen.fill(BLACK)
     question_text = big_font.render(question, True, WHITE)
     screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, screen_height // 2 - 150))
 
-    # Display instruction on how to answer
     instruction_text = font.render("Use arrow keys to select and Enter to submit", True, WHITE)
     screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 100))
     
@@ -115,7 +106,6 @@ def ask_cybersecurity_question():
                 quit()
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
-                    # Check the selected answer
                     selected_answer = chr(pygame.K_a + selected_index).upper()
                     if selected_answer == correct_answer:
                         display_feedback("Correct!", GREEN)
@@ -128,7 +118,6 @@ def ask_cybersecurity_question():
                 elif event.key == pygame.K_UP:
                     selected_index = (selected_index - 1) % len(options)
 
-        # Display the question and options with the selected one highlighted
         screen.fill(BLACK)
         screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, screen_height // 2 - 150))
         for i, option in enumerate(options):
@@ -147,7 +136,7 @@ def display_feedback(message, color):
     pygame.time.wait(2000)
 
 def show_splash_screen(message, duration=None):
-    """Main menu screen with black background and red highlights."""
+    """Show a splash screen with a message."""
     screen.fill(BLACK)
     splash_text = big_font.render(message, True, RED)
     screen.blit(splash_text, (screen_width // 2 - splash_text.get_width() // 2, screen_height // 2 - splash_text.get_height() // 2))
@@ -185,7 +174,7 @@ def update_enemies():
     if not enemies:
         if level < total_levels:
             level += 1
-            increase_difficulty()  # Increase difficulty when leveling up
+            increase_difficulty()
             create_enemies()
         else:
             show_splash_screen("Boss Fight!", 3000)
@@ -226,9 +215,7 @@ def update_bullets():
             if enemy[0] < bullet[0] < enemy[0] + enemy_width and enemy[1] < bullet[1] < enemy[1] + enemy_height:
                 bullets.remove(bullet)
                 enemies.remove(enemy)
-                Green_LED.on()  # Light up green LED when hitting an enemy
-                sleep(0.5)
-                Green_LED.off()
+                hit_enemy()
 
 def update_enemy_bullets():
     global player_lives
@@ -239,79 +226,83 @@ def update_enemy_bullets():
         if bullet[1] > screen_height:
             enemy_bullets.remove(bullet)
 
-        # Check collision with player
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             enemy_bullets.remove(bullet)
-            Red_LED.on()  # Light up red LED when getting hit
-            sleep(0.5)
-            Red_LED.off()
-            if not ask_cybersecurity_question():
-                player_lives -= 1
-                if player_lives == 0:
-                    game_over_screen()
+            player_lives -= 1
+            hit_player()
+
+def hit_enemy():
+    """Handle when a player hits an enemy."""
+    global green_led_flash_time
+    green_led_flash_time = time.time()  # Record the time to flash the LED
+    Green_LED.on()
+
+def hit_player():
+    """Handle when an enemy hits the player."""
+    global red_led_flash_time
+    if player_lives > 0:
+        if ask_cybersecurity_question():
+            return
+    red_led_flash_time = time.time()  # Record the time to flash the LED
+    Red_LED.on()
+
+    if player_lives <= 0:
+        game_over_screen()
 
 def game_over_screen():
-    show_splash_screen("Game Over", duration=3000)
-    reset_game()
+    """Display the game over screen."""
+    show_splash_screen("Game Over!")
+    pygame.quit()
+    quit()
 
-def reset_game():
-    """Reset game variables and start over."""
-    global player_lives, bullets, enemy_bullets, level, boss_fight
-    player_lives = 3
-    bullets = []
-    enemy_bullets = []
-    level = 1
-    boss_fight = False
-    create_enemies()
+def handle_led_flash():
+    """Handle the LED flash timing and turning off the LEDs after the duration has passed."""
+    global green_led_flash_time, red_led_flash_time
 
-def main_game_loop():
-    global player_x, player_y, last_shot_time
+    if green_led_flash_time and time.time() - green_led_flash_time >= led_flash_duration:
+        Green_LED.off()
+        green_led_flash_time = None  # Reset the flash time
+    
+    if red_led_flash_time and time.time() - red_led_flash_time >= led_flash_duration:
+        Red_LED.off()
+        red_led_flash_time = None  # Reset the flash time
 
-    while not game_over:
-        screen.fill(BLACK)
+# Main game loop
+running = True
+while running:
+    screen.fill(BLACK)
 
-        # Event handling
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT:
+                player_x -= player_speed
+            if event.key == pygame.K_RIGHT:
+                player_x += player_speed
+            if event.key == pygame.K_SPACE:
+                current_time = time.time()
+                if current_time - last_shot_time >= shoot_interval:
+                    bullets.append([player_x + player_width // 2 - bullet_width // 2, player_y])
+                    last_shot_time = current_time
 
-        # Key handling
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
-            player_x -= player_speed
-        if keys[pygame.K_RIGHT]:
-            player_x += player_speed
-        if keys[pygame.K_SPACE]:
-            if time.time() - last_shot_time >= shoot_interval:
-                bullets.append([player_x + player_width // 2, player_y])
-                last_shot_time = time.time()
+    # Draw player, bullets, enemies, and enemy bullets
+    draw_player(player_x, player_y)
+    update_bullets()
+    update_enemy_bullets()
+    update_enemies()
+    draw_enemies()
 
-        # Ensure player doesn't move off screen
-        if player_x < 0:
-            player_x = 0
-        if player_x + player_width > screen_width:
-            player_x = screen_width - player_width
+    # Draw player lives
+    lives_text = font.render(f"Lives: {player_lives}", True, WHITE)
+    screen.blit(lives_text, (10, 10))
 
-        draw_player(player_x, player_y)
-        update_bullets()
-        update_enemy_bullets()
-        update_enemies()
-        draw_enemies()
+    # Handle LED flashing logic
+    handle_led_flash()
 
-        # Display player lives and level in top-right corner
-        lives_text = font.render(f"Lives: {player_lives}", True, WHITE)
-        screen.blit(lives_text, (10, 10))
-        level_text = font.render(f"Level: {level}", True, WHITE)
-        screen.blit(level_text, (screen_width - level_text.get_width() - 10, 10))
+    pygame.display.flip()
+    clock.tick(60)
 
-        pygame.display.update()
-        clock.tick(60)
-
-def main():
-    create_enemies()
-    show_splash_screen("Cyber Security Invaders!")
-    main_game_loop()
-
-main()
-
+# Cleanup GPIO resources
+Green_LED.off()
+Red_LED.off()
