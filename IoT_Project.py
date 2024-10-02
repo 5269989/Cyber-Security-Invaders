@@ -1,6 +1,7 @@
 from tkinter import END
 import pygame
 import random
+from gpiozero import LED
 import time
 
 # Initialize Pygame
@@ -225,6 +226,9 @@ def update_bullets():
             if enemy[0] < bullet[0] < enemy[0] + enemy_width and enemy[1] < bullet[1] < enemy[1] + enemy_height:
                 bullets.remove(bullet)
                 enemies.remove(enemy)
+                Green_LED.on()  # Light up green LED when hitting an enemy
+                sleep(0.5)
+                Green_LED.off()
 
 def update_enemy_bullets():
     global player_lives
@@ -238,6 +242,9 @@ def update_enemy_bullets():
         # Check collision with player
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             enemy_bullets.remove(bullet)
+            Red_LED.on()  # Light up red LED when getting hit
+            sleep(0.5)
+            Red_LED.off()
             if not ask_cybersecurity_question():
                 player_lives -= 1
                 if player_lives == 0:
@@ -308,7 +315,3 @@ def main():
 
 main()
 
-if boss_fight():
-    
-else:
-    END
