@@ -1,4 +1,3 @@
-from tkinter import END
 import pygame
 import random
 import time
@@ -64,48 +63,89 @@ total_levels = 2
 boss_fight = False
 clock = pygame.time.Clock()
 show_title_screen = True
+question_limit = 3
+questions_asked = 0
+message_displayed_time = 0
+last_hit_time = 0  # Track the last time the player was hit
+hit_duration = 1.5  # Duration for which the message should be displayed
 
 # Define a list of cybersecurity questions and their multiple-choice options and correct answers
 cybersecurity_questions = [
-    {"question": "What does 'HTTPS' stand for?", 
-     "options": ["A) Hypertext Transfer Protocol Standard", "B) Hypertext Transfer Protocol Secure", "C) High Transfer Protocol Secure"], 
+    {"question": "What does 'HTTPS' stand for?",
+     "options": ["A) Hypertext Transfer Protocol Standard", "B) Hypertext Transfer Protocol Secure", "C) High Transfer Protocol Secure"],
      "answer": "B"},
-    
-    {"question": "What is a common form of phishing attack?", 
-     "options": ["A) Email", "B) Phone call", "C) USB stick"], 
+
+    {"question": "What is a common form of phishing attack?",
+     "options": ["A) Email", "B) Phone call", "C) USB stick"],
      "answer": "A"},
-    
-    {"question": "Which type of malware locks your files and demands payment?", 
-     "options": ["A) Virus", "B) Worm", "C) Ransomware"], 
+
+    {"question": "Which type of malware locks your files and demands payment?",
+     "options": ["A) Virus", "B) Worm", "C) Ransomware"],
      "answer": "C"},
-    
-    {"question": "What is a strong password?", 
-     "options": ["A) Your birthdate", "B) A combination of letters, numbers, and symbols", "C) Your pet's name"], 
+
+    {"question": "What is a strong password?",
+     "options": ["A) Your birthdate", "B) A combination of letters, numbers, and symbols", "C) Your pet's name"],
      "answer": "B"},
-    
-    {"question": "What does '2FA' stand for?", 
-     "options": ["A) Two-Factor Authentication", "B) Two-Factor Access", "C) Two-Factor Allowance"], 
+
+    {"question": "What does '2FA' stand for?",
+     "options": ["A) Two-Factor Authentication", "B) Two-Factor Access", "C) Two-Factor Allowance"],
      "answer": "A"}
 ]
 
+def wrap_text(text, font, max_width):
+    """Wrap text to fit within a maximum width when rendered with the given font."""
+    words = text.split(' ')
+    lines = []
+    current_line = ''
+    for word in words:
+        test_line = current_line + word + ' '
+        if font.size(test_line)[0] <= max_width:
+            current_line = test_line
+        else:
+            lines.append(current_line)
+            current_line = word + ' '
+    if current_line:
+        lines.append(current_line)
+    return lines
+
 def ask_cybersecurity_question():
     """Ask a random cybersecurity question and return True if the answer is correct."""
+    global bullets, enemy_bullets, questions_asked  # Make sure to access the global bullet lists
+
+    # Check if the question limit has been reached
+    if questions_asked >= question_limit:
+        return False  # Automatically return False since no more questions can be asked
+
+    # Increment the number of questions asked
+    questions_asked += 1
+
+    # Clear all bullets when a question is asked
+    bullets = []
+    enemy_bullets = []
+
     question_data = random.choice(cybersecurity_questions)
     question = question_data["question"]
     options = question_data["options"]
     correct_answer = question_data["answer"]
 
-    # Display the question and options
-    selected_index = 0
+    # Wrap the question text
+    question_lines = wrap_text(question, big_font, screen_width - 40)
     screen.fill(BLACK)
-    question_text = big_font.render(question, True, WHITE)
-    screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, screen_height // 2 - 150))
+
+    # Calculate starting y position to center the text vertically
+    total_text_height = len(question_lines) * big_font.get_linesize()
+    y_offset = screen_height // 2 - 150 - total_text_height // 2
+    for i, line in enumerate(question_lines):
+        question_text = big_font.render(line, True, WHITE)
+        screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, y_offset + i * big_font.get_linesize()))
 
     # Display instruction on how to answer
     instruction_text = font.render("Use arrow keys to select and Enter to submit", True, WHITE)
     screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 100))
-    
+
     pygame.display.flip()
+
+    selected_index = 0
 
     while True:
         for event in pygame.event.get():
@@ -129,13 +169,24 @@ def ask_cybersecurity_question():
 
         # Display the question and options with the selected one highlighted
         screen.fill(BLACK)
-        screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, screen_height // 2 - 150))
+        # Re-display the question lines
+        for i, line in enumerate(question_lines):
+            question_text = big_font.render(line, True, WHITE)
+            screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, y_offset + i * big_font.get_linesize()))
+
+        # Display options
+        option_y_start = screen_height // 2 - 50
         for i, option in enumerate(options):
             color = GREEN if i == selected_index else WHITE
-            option_text = font.render(option, True, color)
-            screen.blit(option_text, (screen_width // 2 - option_text.get_width() // 2, screen_height // 2 - 50 + i * 40))
-        screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 100))
+            option_lines = wrap_text(option, font, screen_width - 40)
+            for j, line in enumerate(option_lines):
+                option_text = font.render(line, True, color)
+                line_y = option_y_start + i * 60 + j * font.get_linesize()
+                screen.blit(option_text, (screen_width // 2 - option_text.get_width() // 2, line_y))
+
+        screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 150))
         pygame.display.flip()
+
 
 def display_feedback(message, color):
     """Display feedback on whether the answer was correct or incorrect."""
@@ -145,16 +196,28 @@ def display_feedback(message, color):
     pygame.display.flip()
     pygame.time.wait(2000)
 
-def show_splash_screen(message, duration=None):
-    """Main menu screen with black background and red highlights."""
+def show_splash_screen():
+    """Main menu screen with concise text and emphasis on key phrases."""
     screen.fill(BLACK)
-    splash_text = big_font.render(message, True, RED)
-    screen.blit(splash_text, (screen_width // 2 - splash_text.get_width() // 2, screen_height // 2 - splash_text.get_height() // 2))
+    
+    # Display the game title
+    title_text = bold_font.render("Cyber Security Invaders", True, RED)
+    screen.blit(title_text, (screen_width // 2 - title_text.get_width() // 2, screen_height // 2 - title_text.get_height()))
+
+    # Display controls in neon yellow
+    controls_text = big_font.render("Use arrow keys to move and space to shoot", True, (255, 255, 0))  # Neon yellow
+    screen.blit(controls_text, (screen_width // 2 - controls_text.get_width() // 2, screen_height // 2 + 50))
+
+    # Display "Press any key to continue"
+    continue_text = big_font.render("Press any key to continue", True, WHITE)
+    screen.blit(continue_text, (screen_width // 2 - continue_text.get_width() // 2, screen_height // 2 + 100))
+
     pygame.display.flip()
-    if duration:
-        pygame.time.wait(duration)
-    else:
-        wait_for_keypress()
+    
+    # Wait for user input or a specified duration
+    wait_for_keypress()
+
+
 
 def wait_for_keypress():
     """Wait until a key is pressed to continue."""
@@ -162,6 +225,9 @@ def wait_for_keypress():
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
                 return
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
 
 def draw_player(x, y):
     screen.blit(player_image, (x, y))
@@ -187,7 +253,7 @@ def update_enemies():
             increase_difficulty()  # Increase difficulty when leveling up
             create_enemies()
         else:
-            show_splash_screen("Boss Fight!", 3000)
+            show_splash_screen("Boss Fight!", duration=3000)
             boss_fight = True
 
     edge_reached = False
@@ -225,9 +291,10 @@ def update_bullets():
             if enemy[0] < bullet[0] < enemy[0] + enemy_width and enemy[1] < bullet[1] < enemy[1] + enemy_height:
                 bullets.remove(bullet)
                 enemies.remove(enemy)
+                break
 
 def update_enemy_bullets():
-    global player_lives
+    global player_lives, last_hit_time
     for bullet in enemy_bullets:
         bullet[1] += enemy_bullet_speed
         pygame.draw.rect(screen, RED, (bullet[0], bullet[1], bullet_width, bullet_height))
@@ -238,14 +305,41 @@ def update_enemy_bullets():
         # Check collision with player
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             enemy_bullets.remove(bullet)
+            last_hit_time = time.time()  # Update last hit time
             if not ask_cybersecurity_question():
                 player_lives -= 1
                 if player_lives == 0:
-                    game_over_screen()
+                    game_over_screen()  # Trigger game over when lives run out
+
 
 def game_over_screen():
-    show_splash_screen("Game Over", duration=3000)
-    reset_game()
+    """Displays the Game Over screen with options to restart or quit."""
+    screen.fill(RED)  # Red background
+
+    # Display 'GAME OVER!' in bold white text
+    game_over_text = bold_font.render("GAME OVER!", True, WHITE)
+    screen.blit(game_over_text, (screen_width // 2 - game_over_text.get_width() // 2, screen_height // 2 - 100))
+
+    # Display instructions to press 'R' to restart or 'Q' to quit
+    instruction_text = big_font.render("Press R to Restart or Q to Quit", True, WHITE)
+    screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 50))
+
+    pygame.display.flip()
+
+    # Wait for player to press 'R' or 'Q'
+    waiting_for_input = True
+    while waiting_for_input:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:  # Press 'R' to restart
+                    waiting_for_input = False
+                    reset_game()
+                elif event.key == pygame.K_q:  # Press 'Q' to quit
+                    pygame.quit()
+                    quit()
 
 def reset_game():
     """Reset game variables and start over."""
@@ -256,9 +350,12 @@ def reset_game():
     level = 1
     boss_fight = False
     create_enemies()
+    main_game_loop()
 
 def main_game_loop():
     global player_x, player_y, last_shot_time
+    message_displayed_time = 0  # Initialize to track when the message was displayed
+    message_duration = 2  # Duration to display the message in seconds
 
     while not game_over:
         screen.fill(BLACK)
@@ -298,17 +395,18 @@ def main_game_loop():
         level_text = font.render(f"Level: {level}", True, WHITE)
         screen.blit(level_text, (screen_width - level_text.get_width() - 10, 10))
 
+        # Check if the player was hit and display the message
+        if time.time() - last_hit_time < hit_duration:
+            no_more_questions_text = font.render("No More Questions!", True, RED)
+            screen.blit(no_more_questions_text, (screen_width // 2 - no_more_questions_text.get_width() // 2, 10))
+
         pygame.display.update()
         clock.tick(60)
 
+        
 def main():
     create_enemies()
-    show_splash_screen("Cyber Security Invaders!")
+    show_splash_screen()
     main_game_loop()
 
 main()
-
-if boss_fight():
-    
-else:
-    END
