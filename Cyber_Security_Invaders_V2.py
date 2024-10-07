@@ -30,6 +30,13 @@ player_image = pygame.transform.scale(player_image, (50, 50))
 enemy_image = pygame.image.load("enemy.png")
 enemy_image = pygame.transform.scale(enemy_image, (40, 40))
 
+# Load boss images
+boss_image_1 = pygame.image.load("boss1.png")
+boss_image_2 = pygame.image.load("boss2.png")
+boss_image_1 = pygame.transform.scale(boss_image_1, (150, 150))  # Scale to a larger size
+boss_image_2 = pygame.transform.scale(boss_image_2, (150, 150))  # Same size for the animation
+
+
 # Player settings
 player_width = player_image.get_width()
 player_height = player_image.get_height()
@@ -44,7 +51,7 @@ bullet_height = 10
 bullet_speed = 7
 bullets = []
 last_shot_time = 0
-shoot_interval = 0.25
+shoot_interval = 0.05
 
 # Enemy settings
 enemy_width = enemy_image.get_width()
@@ -55,6 +62,28 @@ enemies = []
 enemy_direction = 1
 enemy_shoot_prob = 0.003
 enemy_bullets = []
+
+# Boss settings
+boss_width = boss_image_1.get_width()
+boss_height = boss_image_1.get_height()
+boss_x = (screen_width - boss_width) // 2
+boss_y = 100  # Move boss down slightly from 50 to 100
+boss_speed = 3
+boss_health = 100
+boss_max_health = 100  # Total health of the boss
+boss_shoot_interval = 1.0  # Boss shoots every 1 second
+last_boss_shot_time = 0
+boss_bullets = []
+boss_animation_interval = 0.5  # Switch images every 0.5 seconds
+last_boss_animation_time = 0
+boss_current_image = boss_image_1  # Start with the first boss image
+boss_direction = 1  # 1 for right, -1 for left
+
+# Health bar settings
+health_bar_width = 200  # The total width of the health bar
+health_bar_height = 20  # The height of the health bar
+health_bar_position = (screen_width // 2 - health_bar_width // 2, 10)  # Centered at the top of the screen
+
 
 # Game variables
 game_over = False
@@ -226,7 +255,100 @@ def show_splash_screen():
     # Wait for user input or a specified duration
     wait_for_keypress()
 
+def boss_fight_splash_screen():
+    """Display a splash screen that announces the boss fight and waits for any key press to continue."""
+    screen.fill(BLACK)
 
+    # Display 'Boss Fight!' in bold red text
+    boss_fight_text = bold_font.render("Boss Fight!", True, RED)
+    screen.blit(boss_fight_text, (screen_width // 2 - boss_fight_text.get_width() // 2, screen_height // 2 - 100))
+
+    # Display 'Press any key to continue' in white text
+    continue_text = big_font.render("Press any key to continue", True, WHITE)
+    screen.blit(continue_text, (screen_width // 2 - continue_text.get_width() // 2, screen_height // 2 + 50))
+
+    pygame.display.flip()
+
+    # Wait for the player to press any key
+    wait_for_keypress()
+
+def update_boss():
+    global boss_x, last_boss_shot_time, boss_current_image, last_boss_animation_time, boss_direction, player_lives
+
+    # Move the boss left and right
+    boss_x += boss_speed * boss_direction
+    if boss_x <= 0 or boss_x + boss_width >= screen_width:
+        boss_direction *= -1  # Change direction when hitting the edge
+
+    # Switch boss image to create a simple animation
+    current_time = time.time()
+    if current_time - last_boss_animation_time >= boss_animation_interval:
+        if boss_current_image == boss_image_1:
+            boss_current_image = boss_image_2
+        else:
+            boss_current_image = boss_image_1
+        last_boss_animation_time = current_time
+
+    # Draw the boss
+    screen.blit(boss_current_image, (boss_x, boss_y))
+
+    # Draw the boss health bar
+    draw_boss_health_bar()
+
+    # Boss shooting bullets towards the player
+    if current_time - last_boss_shot_time >= boss_shoot_interval:
+        boss_bullets.append([boss_x + boss_width // 2, boss_y + boss_height])
+        last_boss_shot_time = current_time
+
+    # Update boss bullets
+    for bullet in boss_bullets:
+        bullet[1] += enemy_bullet_speed * 2  # Boss bullets are faster
+        pygame.draw.rect(screen, YELLOW, (bullet[0], bullet[1], bullet_width, bullet_height))
+
+        # Check if boss bullets hit the player
+        if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
+            boss_bullets.remove(bullet)
+            last_hit_time = time.time()  # Update last hit time
+            if not ask_cybersecurity_question():
+                player_lives -= 1
+                if player_lives == 0:
+                    game_over_screen()  # Trigger game over when lives run out
+
+        # Remove bullets that go off-screen
+        if bullet[1] > screen_height:
+            boss_bullets.remove(bullet)
+
+def check_boss_hit():
+    global boss_health
+
+    for bullet in bullets:
+        if boss_x < bullet[0] < boss_x + boss_width and boss_y < bullet[1] < boss_y + boss_height:
+            bullets.remove(bullet)
+            boss_health -= 1
+
+            if boss_health <= 0:
+                boss_defeated_screen()  # Display boss defeated message
+                reset_game()  # Restart the game
+
+
+def boss_defeated_screen():
+    screen.fill(BLACK)
+    defeated_text = bold_font.render("Boss Defeated!", True, GREEN)
+    screen.blit(defeated_text, (screen_width // 2 - defeated_text.get_width() // 2, screen_height // 2))
+    pygame.display.flip()
+    pygame.time.wait(3000)
+    
+def draw_boss_health_bar():
+    """Draw the boss health bar on the screen."""
+    # Calculate the current width of the health bar based on the boss's health
+    current_health_ratio = boss_health / boss_max_health
+    current_health_width = int(health_bar_width * current_health_ratio)
+
+    # Draw the background of the health bar (the full length in red)
+    pygame.draw.rect(screen, RED, (*health_bar_position, health_bar_width, health_bar_height))
+
+    # Draw the current health (green) based on the boss's remaining health
+    pygame.draw.rect(screen, GREEN, (*health_bar_position, current_health_width, health_bar_height))
 
 def wait_for_keypress():
     """Wait until a key is pressed to continue."""
@@ -262,7 +384,7 @@ def update_enemies():
             increase_difficulty()  # Increase difficulty when leveling up
             create_enemies()
         else:
-            show_splash_screen("Boss Fight!", duration=3000)
+            boss_fight_splash_screen()
             boss_fight = True
 
     edge_reached = False
@@ -303,7 +425,7 @@ def update_bullets():
                 break
 
 def update_enemy_bullets():
-    global player_lives, last_hit_time
+    global player_lives, last_hit_time, player_lives
     for bullet in enemy_bullets:
         bullet[1] += enemy_bullet_speed
         pygame.draw.rect(screen, RED, (bullet[0], bullet[1], bullet_width, bullet_height))
@@ -366,9 +488,7 @@ def reset_game():
     main_game_loop()
 
 def main_game_loop():
-    global player_x, player_y, last_shot_time
-    message_displayed_time = 0  # Initialize to track when the message was displayed
-    message_duration = 2  # Duration to display the message in seconds
+    global player_x, player_y, last_shot_time, boss_fight
 
     while not game_over:
         screen.fill(BLACK)
@@ -398,15 +518,19 @@ def main_game_loop():
 
         draw_player(player_x, player_y)
         update_bullets()
-        update_enemy_bullets()
-        update_enemies()
-        draw_enemies()
 
-        # Display player lives and level in top-right corner
+        if boss_fight:
+            update_boss()
+            check_boss_hit()
+
+        else:
+            update_enemies()
+            draw_enemies()
+            update_enemy_bullets()  # Make sure enemy bullets are updated here
+
+        # Display player lives and level
         lives_text = font.render(f"Lives: {player_lives}", True, WHITE)
         screen.blit(lives_text, (10, 10))
-        level_text = font.render(f"Level: {level}", True, WHITE)
-        screen.blit(level_text, (screen_width - level_text.get_width() - 10, 10))
 
         # Check if the player was hit and display the message
         if time.time() - last_hit_time < hit_duration:
@@ -415,6 +539,8 @@ def main_game_loop():
 
         pygame.display.update()
         clock.tick(60)
+
+
 
         
 def main():
