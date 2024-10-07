@@ -65,6 +65,7 @@ clock = pygame.time.Clock()
 show_title_screen = True
 question_limit = 3
 questions_asked = 0
+asked_questions = []
 message_displayed_time = 0
 last_hit_time = 0  # Track the last time the player was hit
 hit_duration = 1.5  # Duration for which the message should be displayed
@@ -110,7 +111,7 @@ def wrap_text(text, font, max_width):
 
 def ask_cybersecurity_question():
     """Ask a random cybersecurity question and return True if the answer is correct."""
-    global bullets, enemy_bullets, questions_asked  # Make sure to access the global bullet lists
+    global bullets, enemy_bullets, questions_asked, asked_questions
 
     # Check if the question limit has been reached
     if questions_asked >= question_limit:
@@ -123,7 +124,15 @@ def ask_cybersecurity_question():
     bullets = []
     enemy_bullets = []
 
-    question_data = random.choice(cybersecurity_questions)
+    # Choose a question that hasn't been asked yet
+    available_questions = [q for q in cybersecurity_questions if q not in asked_questions]
+
+    if not available_questions:
+        return False  # No more questions available
+
+    question_data = random.choice(available_questions)
+    asked_questions.append(question_data)  # Keep track of the asked question
+
     question = question_data["question"]
     options = question_data["options"]
     correct_answer = question_data["answer"]
@@ -343,11 +352,15 @@ def game_over_screen():
 
 def reset_game():
     """Reset game variables and start over."""
-    global player_lives, bullets, enemy_bullets, level, boss_fight
+    global player_lives, bullets, enemy_bullets, level, boss_fight, questions_asked, message_displayed_time, last_hit_time, asked_questions
     player_lives = 3
     bullets = []
     enemy_bullets = []
     level = 1
+    questions_asked = 0
+    message_displayed_time = 0
+    asked_questions = []
+    last_hit_time = 0 
     boss_fight = False
     create_enemies()
     main_game_loop()
