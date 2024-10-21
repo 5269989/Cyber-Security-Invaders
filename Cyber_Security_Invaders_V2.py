@@ -1,16 +1,22 @@
 import pygame
 import random
 import time
+import os
+import platform
 
-# GPIO setup
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
+# Check if running on a Raspberry Pi
+is_raspberry_pi = platform.system() == "Linux" and "raspberrypi" in platform.uname().machine.lower()
 
-# Set up LEDs
-GREEN_LED_PIN = 4
-RED_LED_PIN = 17
-GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
-GPIO.setup(RED_LED_PIN, GPIO.OUT)
+# If running on Raspberry Pi, initialize GPIO
+if is_raspberry_pi:
+    import RPi.GPIO as GPIO
+    GPIO.setmode(GPIO.BCM)
+    GREEN_LED_PIN = 4
+    RED_LED_PIN = 17
+    GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
+    GPIO.setup(RED_LED_PIN, GPIO.OUT)
+else:
+    print("Not running on a Raspberry Pi. GPIO functionality disabled.")
 
 # Initialize Pygame
 pygame.init()
@@ -339,6 +345,15 @@ def check_boss_hit():
             if boss_health <= 0:
                 boss_defeated_screen()  # Display boss defeated message
                 reset_game()  # Restart the game
+                
+def check_player_hit():
+    global player_x, player_y, player_width, player_height, enemy_bullets
+    for bullet in enemy_bullets:
+        if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
+            enemy_bullets.remove(bullet)  # Remove the bullet that hit the player
+            return True  # Player was hit
+    return False  # No hit detected
+
 
 
 def boss_defeated_screen():
@@ -391,8 +406,10 @@ def update_enemies():
     if not enemies:
         if level < total_levels:
             level += 1
+            increase_difficulty()  # Increase difficulty when leveling up
             create_enemies()
         else:
+            boss_fight_splash_screen()
             boss_fight = True
 
     edge_reached = False
@@ -419,7 +436,6 @@ def increase_difficulty():
     enemy_shoot_prob += 0.001
 
 def update_bullets():
-    global bullets
     for bullet in bullets:
         bullet[1] -= bullet_speed
         pygame.draw.rect(screen, GREEN, (bullet[0], bullet[1], bullet_width, bullet_height))
@@ -431,11 +447,10 @@ def update_bullets():
             if enemy[0] < bullet[0] < enemy[0] + enemy_width and enemy[1] < bullet[1] < enemy[1] + enemy_height:
                 bullets.remove(bullet)
                 enemies.remove(enemy)
-                light_green_led()  # Light green LED when enemy is hit
                 break
 
 def update_enemy_bullets():
-    global player_lives
+    global player_lives, last_hit_time, player_lives
     for bullet in enemy_bullets:
         bullet[1] += enemy_bullet_speed
         pygame.draw.rect(screen, RED, (bullet[0], bullet[1], bullet_width, bullet_height))
@@ -446,20 +461,12 @@ def update_enemy_bullets():
         # Check collision with player
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             enemy_bullets.remove(bullet)
-            player_lives -= 1
-            light_red_led()  # Light red LED when player is hit
-            if player_lives == 0:
-                game_over_screen()  # Trigger game over when lives run out
+            last_hit_time = time.time()  # Update last hit time
+            if not ask_cybersecurity_question():
+                player_lives -= 1
+                if player_lives == 0:
+                    game_over_screen()  # Trigger game over when lives run out
 
-def light_green_led():
-    GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
-    time.sleep(0.5)
-    GPIO.output(GREEN_LED_PIN, GPIO.LOW)
-    
-def light_red_led():
-    GPIO.output(RED_LED_PIN, GPIO.HIGH)
-    time.sleep(0.5)
-    GPIO.output(RED_LED_PIN, GPIO.LOW)
 
 def game_over_screen():
     """Displays the Game Over screen with options to restart or quit."""
@@ -490,6 +497,7 @@ def game_over_screen():
                     pygame.quit()
                     quit()
 
+
 def reset_game():
     """Reset game variables and start over."""
     global player_lives, bullets, enemy_bullets, level, boss_fight, questions_asked, message_displayed_time, last_hit_time, asked_questions
@@ -505,9 +513,12 @@ def reset_game():
     create_enemies()
     main_game_loop()
 
+
 def main_game_loop():
     global player_x, player_y, last_shot_time, boss_fight
 
+    player_hit = False  # Add this line to initialize player_hit
+    
     while not game_over:
         screen.fill(BLACK)
 
@@ -546,18 +557,24 @@ def main_game_loop():
             draw_enemies()
             update_enemy_bullets()  # Make sure enemy bullets are updated here
 
+        # Check if player was hit by an enemy bullet
+        if check_player_hit():  # You'll create this function below
+            player_hit = True
+
         # Display player lives and level
         lives_text = font.render(f"Lives: {player_lives}", True, WHITE)
         screen.blit(lives_text, (10, 10))
 
-        # Check if the player was hit and display the message
-        if time.time() - last_hit_time < hit_duration:
-            no_more_questions_text = font.render("No More Questions!", True, RED)
-            screen.blit(no_more_questions_text, (screen_width // 2 - no_more_questions_text.get_width() // 2, 10))
+        # If the player was hit, display the message and turn on the red LED
+        if player_hit:  # Now it's defined
+            if is_raspberry_pi:
+                GPIO.output(RED_LED_PIN, GPIO.HIGH)  # Turn on red LED
+                time.sleep(0.2)  # LED stays on for 200ms
+                GPIO.output(RED_LED_PIN, GPIO.LOW)  # Turn off red LED
+            player_hit = False  # Reset player_hit after LED blink
 
         pygame.display.update()
         clock.tick(60)
-
 
 
         
