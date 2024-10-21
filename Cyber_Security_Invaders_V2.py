@@ -2,6 +2,16 @@ import pygame
 import random
 import time
 
+# GPIO setup
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+
+# Set up LEDs
+GREEN_LED_PIN = 4
+RED_LED_PIN = 17
+GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
+GPIO.setup(RED_LED_PIN, GPIO.OUT)
+
 # Initialize Pygame
 pygame.init()
 
@@ -381,10 +391,8 @@ def update_enemies():
     if not enemies:
         if level < total_levels:
             level += 1
-            increase_difficulty()  # Increase difficulty when leveling up
             create_enemies()
         else:
-            boss_fight_splash_screen()
             boss_fight = True
 
     edge_reached = False
@@ -411,6 +419,7 @@ def increase_difficulty():
     enemy_shoot_prob += 0.001
 
 def update_bullets():
+    global bullets
     for bullet in bullets:
         bullet[1] -= bullet_speed
         pygame.draw.rect(screen, GREEN, (bullet[0], bullet[1], bullet_width, bullet_height))
@@ -422,10 +431,11 @@ def update_bullets():
             if enemy[0] < bullet[0] < enemy[0] + enemy_width and enemy[1] < bullet[1] < enemy[1] + enemy_height:
                 bullets.remove(bullet)
                 enemies.remove(enemy)
+                light_green_led()  # Light green LED when enemy is hit
                 break
 
 def update_enemy_bullets():
-    global player_lives, last_hit_time, player_lives
+    global player_lives
     for bullet in enemy_bullets:
         bullet[1] += enemy_bullet_speed
         pygame.draw.rect(screen, RED, (bullet[0], bullet[1], bullet_width, bullet_height))
@@ -436,12 +446,20 @@ def update_enemy_bullets():
         # Check collision with player
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             enemy_bullets.remove(bullet)
-            last_hit_time = time.time()  # Update last hit time
-            if not ask_cybersecurity_question():
-                player_lives -= 1
-                if player_lives == 0:
-                    game_over_screen()  # Trigger game over when lives run out
+            player_lives -= 1
+            light_red_led()  # Light red LED when player is hit
+            if player_lives == 0:
+                game_over_screen()  # Trigger game over when lives run out
 
+def light_green_led():
+    GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
+    time.sleep(0.5)
+    GPIO.output(GREEN_LED_PIN, GPIO.LOW)
+    
+def light_red_led():
+    GPIO.output(RED_LED_PIN, GPIO.HIGH)
+    time.sleep(0.5)
+    GPIO.output(RED_LED_PIN, GPIO.LOW)
 
 def game_over_screen():
     """Displays the Game Over screen with options to restart or quit."""
