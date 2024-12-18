@@ -5,7 +5,7 @@ import os
 import platform
 
 # Check if running on a Raspberry Pi
-is_raspberry_pi = platform.system() == "Linux" and "raspberrypi" in platform.uname().machine.lower()
+is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
 
 # If running on Raspberry Pi, initialize GPIO
 if is_raspberry_pi:
@@ -39,19 +39,22 @@ font = pygame.font.SysFont("Arial", 24)
 big_font = pygame.font.SysFont("Arial", 40)
 bold_font = pygame.font.SysFont("Arial", 80, bold=True)
 
-# Load and resize player and enemy images
-# Note: The path to these images assumes they are in a folder named 'assets'
-player_image = pygame.image.load(os.path.join("assets", "player.png")).convert_alpha()
-player_image = pygame.transform.scale(player_image, (50, 50))
+def load_and_scale_image(filename, size):
+    try:
+        image = pygame.image.load(os.path.join("assets", filename)).convert_alpha()
+        return pygame.transform.scale(image, size)
+    except pygame.error as e:
+        print(f"Error loading or scaling image '{filename}': {e}")
+        pygame.quit()
+        quit()
 
-enemy_image = pygame.image.load(os.path.join("assets", "enemy.png")).convert_alpha()
-enemy_image = pygame.transform.scale(enemy_image, (40, 40))
+# Load and resize player and enemy images
+player_image = load_and_scale_image("player.png", (50, 50))
+enemy_image = load_and_scale_image("enemy.png", (40, 40))
 
 # Load boss images
-boss_image_1 = pygame.image.load(os.path.join("assets", "boss1.png")).convert_alpha()
-boss_image_2 = pygame.image.load(os.path.join("assets", "boss2.png")).convert_alpha()
-boss_image_1 = pygame.transform.scale(boss_image_1, (150, 150))  # Scale to a larger size
-boss_image_2 = pygame.transform.scale(boss_image_2, (150, 150))  # Same size for the animation
+boss_image_1 = load_and_scale_image("boss1.png", (150, 150))
+boss_image_2 = load_and_scale_image("boss2.png", (150, 150))
 
 # Player settings
 player_width = player_image.get_width()
@@ -154,8 +157,18 @@ def wrap_text(text, font, max_width):
         lines.append(current_line)
     return lines
 
+def handle_player_hit(correct_answer):
+    global LED_off_time
+    if is_raspberry_pi:
+        if correct_answer:
+            GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
+            GPIO.output(RED_LED_PIN, GPIO.LOW)
+        else:
+            GPIO.output(RED_LED_PIN, GPIO.HIGH)
+            GPIO.output(GREEN_LED_PIN, GPIO.LOW)
+        LED_off_time = time.time() + 0.2  # LED stays on for 200ms
+
 def ask_cybersecurity_question():
-    """Ask a random cybersecurity question and return True if the answer is correct."""
     global bullets, enemy_bullets, questions_asked, asked_questions
 
     # Check if the question limit has been reached
@@ -212,9 +225,11 @@ def ask_cybersecurity_question():
                     selected_answer = chr(pygame.K_a + selected_index).upper()
                     if selected_answer == correct_answer:
                         display_feedback("Correct!", GREEN)
+                        handle_player_hit(True)  # Green for correct answer
                         return True
                     else:
                         display_feedback("Incorrect!", RED)
+                        handle_player_hit(False)  # Red for incorrect answer
                         return False
                 elif event.key == pygame.K_DOWN:
                     selected_index = (selected_index + 1) % len(options)
@@ -227,8 +242,8 @@ def ask_cybersecurity_question():
         for i, line in enumerate(question_lines):
             question_text = big_font.render(line, True, WHITE)
             screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, y_offset + i * big_font.get_linesize()))
-     
-         # Display options
+
+        # Display options
         option_y_start = screen_height // 2 - 50
         for i, option in enumerate(options):
             color = GREEN if i == selected_index else WHITE
@@ -240,6 +255,7 @@ def ask_cybersecurity_question():
 
         screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 150))
         pygame.display.flip()
+
 
 def display_feedback(message, color):
     """Display feedback on whether the answer was correct or incorrect."""
@@ -302,9 +318,6 @@ def update_boss():
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             boss_bullets.remove(bullet)
             last_hit_time = time.time()  # Update last hit time
-            if is_raspberry_pi:
-                LED_off_time = time.time() + 0.2  # Set time to turn off LED
-                GPIO.output(RED_LED_PIN, GPIO.HIGH)  # Turn on red LED
             player_hit = True
 
     return player_hit
@@ -328,9 +341,6 @@ def check_player_hit():
         if player_x < bullet[0] < player_x + player_width and player_y < bullet[1] < player_y + player_height:
             enemy_bullets.remove(bullet)  # Remove the bullet that hit the player
             last_hit_time = time.time()  # Update last hit time
-            if is_raspberry_pi:
-                LED_off_time = time.time() + 0.2  # Set time to turn off LED
-                GPIO.output(RED_LED_PIN, GPIO.HIGH)  # Turn on red LED
             player_hit = True
     return player_hit
 
@@ -560,6 +570,7 @@ def main_game_loop():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
+                quit()
 
         # Key handling
         keys = pygame.key.get_pressed()
@@ -608,7 +619,8 @@ def main_game_loop():
         screen.blit(boss_text, (screen_width - boss_text.get_width() - 10, 10))
 
         # Turn off LED if time has passed
-        if is_raspberry_pi and time.time() >= LED_off_time and GPIO.input(RED_LED_PIN) == GPIO.HIGH:
+        if is_raspberry_pi and time.time() >= LED_off_time:
+            GPIO.output(GREEN_LED_PIN, GPIO.LOW)
             GPIO.output(RED_LED_PIN, GPIO.LOW)
 
         pygame.display.update()
