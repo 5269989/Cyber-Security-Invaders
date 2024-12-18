@@ -107,7 +107,6 @@ level = 1
 total_levels = 2
 boss_fight = False
 clock = pygame.time.Clock()
-show_title_screen = True
 question_limit = 3
 questions_asked = 0
 asked_questions = []
@@ -250,27 +249,6 @@ def display_feedback(message, color):
     pygame.display.flip()
     pygame.time.wait(2000)
 
-def show_splash_screen():
-    """Main menu screen with concise text and emphasis on key phrases."""
-    screen.fill(BLACK)
-    
-    # Display the game title
-    title_text = bold_font.render("Cyber Security Invaders", True, RED)
-    screen.blit(title_text, (screen_width // 2 - title_text.get_width() // 2, screen_height // 2 - title_text.get_height()))
-
-    # Display controls in neon yellow
-    controls_text = big_font.render("Use arrow keys to move and space to shoot", True, (255, 255, 0))  # Neon yellow
-    screen.blit(controls_text, (screen_width // 2 - controls_text.get_width() // 2, screen_height // 2 + 50))
-
-    # Display "Press any key to continue"
-    continue_text = big_font.render("Press any key to continue", True, WHITE)
-    screen.blit(continue_text, (screen_width // 2 - continue_text.get_width() // 2, screen_height // 2 + 100))
-
-    pygame.display.flip()
-    
-    # Wait for user input or a specified duration
-    wait_for_keypress()
-
 def boss_fight_splash_screen():
     """Display a splash screen that announces the boss fight and waits for any key press to continue."""
     screen.fill(BLACK)
@@ -353,15 +331,6 @@ def check_player_hit():
             enemy_bullets.remove(bullet)  # Remove the bullet that hit the player
             return True  # Player was hit
     return False  # No hit detected
-
-
-
-def boss_defeated_screen():
-    screen.fill(BLACK)
-    defeated_text = bold_font.render("Boss Defeated!", True, GREEN)
-    screen.blit(defeated_text, (screen_width // 2 - defeated_text.get_width() // 2, screen_height // 2))
-    pygame.display.flip()
-    pygame.time.wait(3000)
     
 def draw_boss_health_bar():
     """Draw the boss health bar on the screen."""
@@ -467,7 +436,71 @@ def update_enemy_bullets():
                 if player_lives == 0:
                     game_over_screen()  # Trigger game over when lives run out
 
+def show_menu():
+    """Display the main menu with options Start, Leaderboard, Instructions, and Exit."""
+    menu_options = ["Start", "Leaderboard", "Instructions", "Exit"]
+    selected_option = 0
 
+    while True:
+        screen.fill(BLACK)
+        
+        # Title
+        title_text = bold_font.render("Cyber Security Invaders", True, RED)
+        screen.blit(title_text, (screen_width // 2 - title_text.get_width() // 2, 50))
+
+        # Menu options
+        for i, option in enumerate(menu_options):
+            color = GREEN if i == selected_option else WHITE
+            option_text = big_font.render(option, True, color)
+            screen.blit(option_text, (screen_width // 2 - option_text.get_width() // 2, 200 + i * 60))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(menu_options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(menu_options)
+                elif event.key == pygame.K_RETURN:
+                    if menu_options[selected_option] == "Start":
+                        reset_game()
+                        return
+                    elif menu_options[selected_option] == "Leaderboard":
+                        show_leaderboard()  # You'll need to implement this
+                    elif menu_options[selected_option] == "Instructions":
+                        show_instructions()  # You'll need to implement this
+                    elif menu_options[selected_option] == "Exit":
+                        pygame.quit()
+                        quit()
+
+def show_leaderboard():
+    """Display a leaderboard. This function should be implemented with actual data."""
+    screen.fill(BLACK)
+    leaderboard_text = big_font.render("Leaderboard Placeholder", True, WHITE)
+    screen.blit(leaderboard_text, (screen_width // 2 - leaderboard_text.get_width() // 2, screen_height // 2))
+    pygame.display.flip()
+    wait_for_keypress()
+
+def show_instructions():
+    """Display game instructions. This should explain how to play."""
+    screen.fill(BLACK)
+    instructions = [
+        "Move with arrow keys, shoot with space bar.",
+        "Defend against enemies with your cybersecurity knowledge.",
+        "Answer questions correctly to survive longer.",
+        "Defeat the boss to win."
+    ]
+    y_position = 100
+    for line in instructions:
+        instruction_text = big_font.render(line, True, WHITE)
+        screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, y_position))
+        y_position += 50
+    pygame.display.flip()
+    wait_for_keypress()
 def game_over_screen():
     """Displays the Game Over screen with options to restart or quit."""
     screen.fill(RED)  # Red background
@@ -497,28 +530,33 @@ def game_over_screen():
                     pygame.quit()
                     quit()
 
+def boss_defeated_screen():
+    screen.fill(BLACK)
+    defeated_text = bold_font.render("Boss Defeated!", True, GREEN)
+    screen.blit(defeated_text, (screen_width // 2 - defeated_text.get_width() // 2, screen_height // 2))
+    pygame.display.flip()
+    pygame.time.wait(3000)
+    show_menu()  # Return to menu after showing victory screen
 
 def reset_game():
-    """Reset game variables and start over."""
-    global player_lives, bullets, enemy_bullets, level, boss_fight, questions_asked, message_displayed_time, last_hit_time, asked_questions
+    global player_lives, bullets, enemy_bullets, level, boss_fight, questions_asked, message_displayed_time, last_hit_time, asked_questions, boss_health
     player_lives = 3
     bullets = []
     enemy_bullets = []
     level = 1
+    boss_fight = False
     questions_asked = 0
     message_displayed_time = 0
     asked_questions = []
-    last_hit_time = 0 
-    boss_fight = False
+    last_hit_time = 0
+    boss_health = boss_max_health  # Reset boss health
     create_enemies()
-    main_game_loop()
+    main_game_loop(player_lives)
 
 
-def main_game_loop():
+def main_game_loop(player_lives):
     global player_x, player_y, last_shot_time, boss_fight
 
-    player_hit = False  # Add this line to initialize player_hit
-    
     while not game_over:
         screen.fill(BLACK)
 
@@ -551,36 +589,39 @@ def main_game_loop():
         if boss_fight:
             update_boss()
             check_boss_hit()
-
         else:
             update_enemies()
             draw_enemies()
-            update_enemy_bullets()  # Make sure enemy bullets are updated here
+            update_enemy_bullets()
 
         # Check if player was hit by an enemy bullet
-        if check_player_hit():  # You'll create this function below
-            player_hit = True
+        if check_player_hit():
+            if not ask_cybersecurity_question():
+                player_lives -= 1
+                if player_lives == 0:
+                    game_over_screen()
 
-        # Display player lives and level
         lives_text = font.render(f"Lives: {player_lives}", True, WHITE)
         screen.blit(lives_text, (10, 10))
 
-        # If the player was hit, display the message and turn on the red LED
-        if player_hit:  # Now it's defined
-            if is_raspberry_pi:
-                GPIO.output(RED_LED_PIN, GPIO.HIGH)  # Turn on red LED
-                time.sleep(0.2)  # LED stays on for 200ms
-                GPIO.output(RED_LED_PIN, GPIO.LOW)  # Turn off red LED
-            player_hit = False  # Reset player_hit after LED blink
+        level_color = RED if boss_fight else WHITE
+        level_text = font.render(f"Level: {'BOSS' if boss_fight else level}", True, level_color)
+        screen.blit(level_text, (screen_width - level_text.get_width() - 10, 10))
 
+        # If the player was hit, display the message and turn on the red LED
         pygame.display.update()
         clock.tick(60)
+
+    return player_lives  # Return the updated lives
 
 
         
 def main():
+    player_lives = 3
     create_enemies()
-    show_splash_screen()
-    main_game_loop()
+    show_menu()
+    while not game_over:
+        player_lives = main_game_loop(player_lives)
+    # Handle game over scenario if you need to do something after the loop
 
 main()
