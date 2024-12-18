@@ -45,7 +45,7 @@ Shoot: Spacebar
 Select Menu Options: Up/Down Arrow Keys, Enter to confirm
 Game Over Interaction: 'R' to restart, 'Q' to quit
 
-## **Save the file** in your project's root directory.
+## Save the file in your project's root directory.
 
 This file is now ready to be included in your GitHub repository or used locally. If you want to make it available online, you would typically commit and push this file to your repository:
 
