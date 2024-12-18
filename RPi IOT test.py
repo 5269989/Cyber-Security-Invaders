@@ -115,9 +115,6 @@ asked_questions = []
 last_hit_time = 0  # Track the last time the player was hit
 hit_duration = 1.5  # Duration for which the message should be displayed
 
-# LED control variable
-LED_off_time = 0
-
 # Define a list of cybersecurity questions and their multiple-choice options and correct answers
 cybersecurity_questions = [
     {"question": "What does 'HTTPS' stand for?",
@@ -157,113 +154,26 @@ def wrap_text(text, font, max_width):
         lines.append(current_line)
     return lines
 
-def handle_player_hit(correct_answer):
-    global LED_off_time
-    if is_raspberry_pi:
-        if correct_answer:
-            GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
-            GPIO.output(RED_LED_PIN, GPIO.LOW)
-        else:
-            GPIO.output(RED_LED_PIN, GPIO.HIGH)
-            GPIO.output(GREEN_LED_PIN, GPIO.LOW)
-        LED_off_time = time.time() + 0.2  # LED stays on for 200ms
-
-def ask_cybersecurity_question():
-    global bullets, enemy_bullets, questions_asked, asked_questions
-
-    # Check if the question limit has been reached
-    if questions_asked >= question_limit:
-        return False  # Automatically return False since no more questions can be asked
-
-    # Increment the number of questions asked
-    questions_asked += 1
-
-    # Clear all bullets when a question is asked
-    bullets = []
-    enemy_bullets = []
-
-    # Choose a question that hasn't been asked yet
-    available_questions = [q for q in cybersecurity_questions if q not in asked_questions]
-
-    if not available_questions:
-        return False  # No more questions available
-
-    question_data = random.choice(available_questions)
-    asked_questions.append(question_data)  # Keep track of the asked question
-
-    question = question_data["question"]
-    options = question_data["options"]
-    correct_answer = question_data["answer"]
-
-    # Wrap the question text
-    question_lines = wrap_text(question, big_font, screen_width - 40)
-    screen.fill(BLACK)
-
-    # Calculate starting y position to center the text vertically
-    total_text_height = len(question_lines) * big_font.get_linesize()
-    y_offset = screen_height // 2 - 150 - total_text_height // 2
-    for i, line in enumerate(question_lines):
-        question_text = big_font.render(line, True, WHITE)
-        screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, y_offset + i * big_font.get_linesize()))
-
-    # Display instruction on how to answer
-    instruction_text = font.render("Use arrow keys to select and Enter to submit", True, WHITE)
-    screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 100))
-
-    pygame.display.flip()
-
-    selected_index = 0
-
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    # Check the selected answer
-                    selected_answer = chr(pygame.K_a + selected_index).upper()
-                    if selected_answer == correct_answer:
-                        display_feedback("Correct!", GREEN)
-                        handle_player_hit(True)  # Green for correct answer
-                        return True
-                    else:
-                        display_feedback("Incorrect!", RED)
-                        handle_player_hit(False)  # Red for incorrect answer
-                        return False
-                elif event.key == pygame.K_DOWN:
-                    selected_index = (selected_index + 1) % len(options)
-                elif event.key == pygame.K_UP:
-                    selected_index = (selected_index - 1) % len(options)
-
-        # Display the question and options with the selected one highlighted
-        screen.fill(BLACK)
-        # Re-display the question lines
-        for i, line in enumerate(question_lines):
-            question_text = big_font.render(line, True, WHITE)
-            screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, y_offset + i * big_font.get_linesize()))
-
-        # Display options
-        option_y_start = screen_height // 2 - 50
-        for i, option in enumerate(options):
-            color = GREEN if i == selected_index else WHITE
-            option_lines = wrap_text(option, font, screen_width - 40)
-            for j, line in enumerate(option_lines):
-                option_text = font.render(line, True, color)
-                line_y = option_y_start + i * 60 + j * font.get_linesize()
-                screen.blit(option_text, (screen_width // 2 - option_text.get_width() // 2, line_y))
-
-        screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 150))
-        pygame.display.flip()
-
-
 def display_feedback(message, color):
     """Display feedback on whether the answer was correct or incorrect."""
     screen.fill(BLACK)
     feedback_text = bold_font.render(message, True, color)
     screen.blit(feedback_text, (screen_width // 2 - feedback_text.get_width() // 2, screen_height // 2 - feedback_text.get_height() // 2))
     pygame.display.flip()
-    pygame.time.wait(2000)
+
+    if is_raspberry_pi:
+        if color == GREEN:
+            GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
+            GPIO.output(RED_LED_PIN, GPIO.LOW)
+        else:
+            GPIO.output(RED_LED_PIN, GPIO.HIGH)
+            GPIO.output(GREEN_LED_PIN, GPIO.LOW)
+
+    pygame.time.wait(2000)  # Show feedback for 2 seconds
+
+    if is_raspberry_pi:
+        GPIO.output(GREEN_LED_PIN, GPIO.LOW)
+        GPIO.output(RED_LED_PIN, GPIO.LOW)
 
 def boss_fight_splash_screen():
     """Display a splash screen that announces the boss fight and waits for any key press to continue."""
@@ -560,8 +470,94 @@ def reset_game():
     create_enemies()
     main_game_loop()
 
+def ask_cybersecurity_question():
+    global bullets, enemy_bullets, questions_asked, asked_questions
+
+    # Check if the question limit has been reached
+    if questions_asked >= question_limit:
+        return False  # Automatically return False since no more questions can be asked
+
+    # Increment the number of questions asked
+    questions_asked += 1
+
+    # Clear all bullets when a question is asked
+    bullets = []
+    enemy_bullets = []
+
+    # Choose a question that hasn't been asked yet
+    available_questions = [q for q in cybersecurity_questions if q not in asked_questions]
+
+    if not available_questions:
+        return False  # No more questions available
+
+    question_data = random.choice(available_questions)
+    asked_questions.append(question_data)  # Keep track of the asked question
+
+    question = question_data["question"]
+    options = question_data["options"]
+    correct_answer = question_data["answer"]
+
+    # Wrap the question text
+    question_lines = wrap_text(question, big_font, screen_width - 40)
+    screen.fill(BLACK)
+
+    # Calculate starting y position to center the text vertically
+    total_text_height = len(question_lines) * big_font.get_linesize()
+    y_offset = screen_height // 2 - 150 - total_text_height // 2
+    for i, line in enumerate(question_lines):
+        question_text = big_font.render(line, True, WHITE)
+        screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, y_offset + i * big_font.get_linesize()))
+
+    # Display instruction on how to answer
+    instruction_text = font.render("Use arrow keys to select and Enter to submit", True, WHITE)
+    screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 100))
+
+    pygame.display.flip()
+
+    selected_index = 0
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    # Check the selected answer
+                    selected_answer = chr(pygame.K_a + selected_index).upper()
+                    if selected_answer == correct_answer:
+                        display_feedback("Correct!", GREEN)
+                        return True
+                    else:
+                        display_feedback("Incorrect!", RED)
+                        return False
+                elif event.key == pygame.K_DOWN:
+                    selected_index = (selected_index + 1) % len(options)
+                elif event.key == pygame.K_UP:
+                    selected_index = (selected_index - 1) % len(options)
+
+        # Display the question and options with the selected one highlighted
+        screen.fill(BLACK)
+        # Re-display the question lines
+        for i, line in enumerate(question_lines):
+            question_text = big_font.render(line, True, WHITE)
+            screen.blit(question_text, (screen_width // 2 - question_text.get_width() // 2, y_offset + i * big_font.get_linesize()))
+
+        # Display options
+        option_y_start = screen_height // 2 - 50
+        for i, option in enumerate(options):
+            color = GREEN if i == selected_index else WHITE
+            option_lines = wrap_text(option, font, screen_width - 40)
+            for j, line in enumerate(option_lines):
+                option_text = font.render(line, True, color)
+                line_y = option_y_start + i * 60 + j * font.get_linesize()
+                screen.blit(option_text, (screen_width // 2 - option_text.get_width() // 2, line_y))
+
+        screen.blit(instruction_text, (screen_width // 2 - instruction_text.get_width() // 2, screen_height // 2 + 150))
+        pygame.display.flip()
+
 def main_game_loop():
-    global player_x, player_y, last_shot_time, boss_fight, player_lives, LED_off_time
+    global player_x, player_y, last_shot_time, boss_fight, player_lives
 
     while not game_over:
         screen.fill(BLACK)
@@ -617,11 +613,6 @@ def main_game_loop():
         boss_text = font.render("BOSS" if boss_fight else str(level), True, RED if boss_fight else WHITE)
         screen.blit(level_text, (screen_width - level_text.get_width() - boss_text.get_width() - 10, 10))
         screen.blit(boss_text, (screen_width - boss_text.get_width() - 10, 10))
-
-        # Turn off LED if time has passed
-        if is_raspberry_pi and time.time() >= LED_off_time:
-            GPIO.output(GREEN_LED_PIN, GPIO.LOW)
-            GPIO.output(RED_LED_PIN, GPIO.LOW)
 
         pygame.display.update()
         clock.tick(60)
