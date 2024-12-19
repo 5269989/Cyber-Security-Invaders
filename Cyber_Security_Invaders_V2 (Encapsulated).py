@@ -35,6 +35,9 @@ class Game:
         self.asked_questions = []
         self.last_hit_time = 0
         self.hit_duration = 1.5
+        self.start_time = 0
+        self.hits = 0
+        self.score = 5000
 
         # Colors
         self.BLACK = (0, 0, 0)
@@ -78,6 +81,7 @@ class Game:
         ]
 
     def main_game_loop(self):
+        self.start_time = time.time()
         while not self.game_over:
             self.screen.fill(self.BLACK)
             
@@ -89,6 +93,11 @@ class Game:
             keys = pygame.key.get_pressed()
             self.player.move(keys)
             self.player.shoot(keys)
+
+            current_time = time.time()
+            elapsed_time = current_time - self.start_time
+            self.score = 5000 - (int(elapsed_time) * 50) - (self.hits * 250)  # 50 points per second, 250 per hit
+            self.score = max(0, self.score)  # Ensure score doesn't go below 0
 
             if self.boss_fight:
                 player_hit = self.boss.update()
@@ -120,10 +129,21 @@ class Game:
         lives_text = self.font.render(f"Lives: {self.player.lives}", True, self.WHITE)
         self.screen.blit(lives_text, (10, 10))
 
+        score_text = self.font.render(f"Score: {self.score}", True, self.WHITE)
+        self.screen.blit(score_text, (10, 40))
+
         level_text = self.font.render(f"Level: ", True, self.WHITE)
         boss_text = self.font.render("BOSS" if self.boss_fight else str(self.level), True, self.RED if self.boss_fight else self.WHITE)
         self.screen.blit(level_text, (self.screen_width - level_text.get_width() - boss_text.get_width() - 10, 10))
         self.screen.blit(boss_text, (self.screen_width - boss_text.get_width() - 10, 10))
+
+    def clear_bullets(self):
+        """
+        Clears all bullets from the game screen to allow a fresh start after answering a question.
+        """
+        self.bullet_manager.player_bullets.clear()
+        self.bullet_manager.enemy_bullets.clear()
+        self.bullet_manager.boss_bullets.clear()
 
     def ask_cybersecurity_question(self):
         if self.questions_asked >= self.question_limit:
@@ -167,10 +187,11 @@ class Game:
                         selected_answer = chr(pygame.K_a + selected_index).upper()
                         if selected_answer == correct_answer:
                             self.display_feedback("Correct!", self.GREEN)
-                            return True
                         else:
                             self.display_feedback("Incorrect!", self.RED)
-                            return False
+                        self.hits += 1  # Increment hits every time hit no matter the answer
+                        self.clear_bullets()
+                        return True  # Return true to indicate question was answered
                     elif event.key == pygame.K_DOWN:
                         selected_index = (selected_index + 1) % len(options)
                     elif event.key == pygame.K_UP:
@@ -240,7 +261,7 @@ class Game:
         self.screen.fill(self.RED)
         game_over_text = self.bold_font.render("GAME OVER!", True, self.WHITE)
         self.screen.blit(game_over_text, (self.screen_width // 2 - game_over_text.get_width() // 2, self.screen_height // 2 - 100))
-        instruction_text = self.big_font.render("Press R to Restart or Q to Quit", True, self.WHITE)
+        instruction_text = self.big_font.render("Press R to Return to menu or Q to Quit", True, self.WHITE)
         self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, self.screen_height // 2 + 50))
         pygame.display.flip()
 
@@ -310,30 +331,52 @@ class Game:
         self.screen.blit(defeated_text, (self.screen_width // 2 - defeated_text.get_width() // 2, self.screen_height // 2))
         pygame.display.flip()
         pygame.time.wait(2000)  # Show for 2 seconds
-        self.show_menu()  # Return to menu after showing victory screen
+        self.end_game_screen()  # Changed to show end game screen for score input
 
     def show_leaderboard(self):
         self.screen.fill(self.BLACK)
-    
-        # Smaller title or abbreviated
-        leaderboard_title = self.big_font.render("Top Cyber Defenders", True, self.YELLOW)
+        leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
         self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
     
-        # Adjust position and spacing
+        smaller_font = pygame.font.SysFont("Arial", 22)  # Smaller font for more entries
         y_position = 100
-        for i, player in enumerate([{"name": "Player1", "score": 1000}, {"name": "Player2", "score": 800}]):  # Placeholder data
-            player_text = self.font.render(f"{i+1}. {player['name']} - {player['score']} points", True, self.WHITE)
-            self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
-            y_position += 50  # Increase spacing
 
-        # Display random cybersecurity tip
-        tip = "Keep your passwords secret like a superhero's identity!"
+        # Load, sort, and trim scores to top 10
+        scores = []
+        try:
+            with open('Leaderboard.txt', 'r') as file:
+                for line in file:
+                    entry = line.strip().split(':')
+                    if len(entry) == 2:
+                        scores.append((entry[0], int(entry[1])))
+        
+            # Sort scores from highest to lowest
+            scores.sort(key=lambda x: x[1], reverse=True)
+        
+            # Keep only top 10 scores
+            if len(scores) > 10:
+                scores = scores[:10]
+
+            # Write back to file
+            with open('Leaderboard.txt', 'w') as file:
+                for player, score in scores:
+                    file.write(f"{player}:{score}\n")
+
+            # Display on screen
+            for i, (player, score) in enumerate(scores):
+                player_text = smaller_font.render(f"{i+1}. {player} - {score} points", True, self.WHITE)
+                self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
+                y_position += 40  # Reduced space between entries
+        except FileNotFoundError:
+            no_score_text = smaller_font.render("No scores yet!", True, self.WHITE)
+            self.screen.blit(no_score_text, (self.screen_width // 2 - no_score_text.get_width() // 2, y_position))
+
+        tip = "Press any key to go back!"
         tip_text = self.font.render(tip, True, self.GREEN)
         self.screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, self.screen_height - 50))
 
         pygame.display.flip()
         self.wait_for_keypress()
-
         
     def level_complete_screen(self):
         self.screen.fill(self.BLACK)
@@ -345,17 +388,15 @@ class Game:
     def show_instructions(self):
         self.screen.fill(self.BLACK)
     
-        # Smaller title to fit better
         instructions_title = self.big_font.render("Cybersecurity Mission", True, self.RED)
         self.screen.blit(instructions_title, (self.screen_width // 2 - instructions_title.get_width() // 2, 30))
 
-        # Use a smaller font for instructions or implement pagination
-        instructions_font = pygame.font.SysFont("Arial", 20)  # Smaller font
+        instructions_font = pygame.font.SysFont("Arial", 20)
     
         instructions = [
             "- Use Arrow Keys to move away from cyber attacks!",
             "- Shoot with Spacebar to stop phishing emails!",
-            "- Answer quiz questions to gain extra power!",
+            "- Answer quiz questions to mitigate damage!",
             "- Strong passwords are like secret codes - mix everything!",
             "- Beware of fakes; not all emails are what they seem!",
             "- Use Two-Factor Authentication for double protection!"
@@ -367,7 +408,6 @@ class Game:
             self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, y_position))
             y_position += 30
 
-        # Add navigation for more instructions if needed
         more_text = instructions_font.render("Press any key to go back!", True, self.YELLOW)
         self.screen.blit(more_text, (self.screen_width // 2 - more_text.get_width() // 2, self.screen_height - 50))
 
@@ -385,7 +425,75 @@ class Game:
         self.last_hit_time = 0
         self.boss.health = self.boss.max_health
         self.enemy_manager.create_enemies()
+        self.hits = 0  # Reset hits
+        self.score = 5000  # Reset score
         self.main_game_loop()
+
+    def end_game_screen(self):
+        self.screen.fill(self.BLACK)
+        end_text = self.big_font.render(f"Game Over! Your Score: {self.score}", True, self.WHITE)
+        self.screen.blit(end_text, (self.screen_width // 2 - end_text.get_width() // 2, self.screen_height // 2 - 100))
+        name_prompt = self.big_font.render("Enter your name (3 letters):", True, self.WHITE)
+        self.screen.blit(name_prompt, (self.screen_width // 2 - name_prompt.get_width() // 2, self.screen_height // 2))
+
+        input_box = pygame.Rect(self.screen_width // 2 - 50, self.screen_height // 2 + 50, 100, 32)
+        color_inactive = pygame.Color('lightskyblue3')
+        color_active = pygame.Color('dodgerblue2')
+        color = color_inactive
+        active = False
+        text = ''
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if input_box.collidepoint(event.pos):
+                        active = not active
+                    else:
+                        active = False
+                    color = color_active if active else color_inactive
+                if event.type == pygame.KEYDOWN:
+                    if active:
+                        if event.key == pygame.K_RETURN:
+                            if len(text) == 3:
+                                self.save_score(text.upper(), self.score)
+                                return
+                        elif event.key == pygame.K_BACKSPACE:
+                            text = text[:-1]
+                        elif len(text) < 3 and event.unicode.isalpha():
+                            text += event.unicode
+
+            txt_surface = self.font.render(text, True, self.WHITE)
+            width = max(100, txt_surface.get_width()+10)
+            input_box.w = width
+            self.screen.blit(txt_surface, (input_box.x+5, input_box.y+5))
+            pygame.draw.rect(self.screen, color, input_box, 2)
+
+            pygame.display.flip()
+
+    def save_score(self, name, score):
+        scores = []
+        try:
+            with open('Leaderboard.txt', 'r') as file:
+                for line in file:
+                    entry = line.strip().split(':')
+                    if len(entry) == 2:
+                        scores.append((entry[0], int(entry[1])))
+        except FileNotFoundError:
+            pass  # File doesn't exist, start with empty list
+
+        scores.append((name, score))
+        scores.sort(key=lambda x: x[1], reverse=True)  # Sort by score from highest to lowest
+        if len(scores) > 10:
+            scores = scores[:10]  # Keep only top 10 scores
+
+        with open('Leaderboard.txt', 'w') as file:
+            for player, score in scores:
+                file.write(f"{player}:{score}\n")
+
+        self.show_menu()  # Return to main menu after saving score
 
 class Player:
     def __init__(self, game):
@@ -610,8 +718,8 @@ class BulletManager:
         return False
 
 def main():
-        game = Game()
-        while True:
-            game.show_menu()
+    game = Game()
+    while True:
+        game.show_menu()
 
 main()
