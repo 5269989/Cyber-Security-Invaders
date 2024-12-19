@@ -22,7 +22,7 @@ pygame.init()
 
 class Game:
     def __init__(self):
-        self.screen_width = 800
+        self.screen_width = 1000
         self.screen_height = 600
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.clock = pygame.time.Clock()
@@ -314,10 +314,26 @@ class Game:
 
     def show_leaderboard(self):
         self.screen.fill(self.BLACK)
-        leaderboard_text = self.big_font.render("Leaderboard Placeholder", True, self.WHITE)
-        self.screen.blit(leaderboard_text, (self.screen_width // 2 - leaderboard_text.get_width() // 2, self.screen_height // 2))
+    
+        # Smaller title or abbreviated
+        leaderboard_title = self.big_font.render("Top Cyber Defenders", True, self.YELLOW)
+        self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
+    
+        # Adjust position and spacing
+        y_position = 100
+        for i, player in enumerate([{"name": "Player1", "score": 1000}, {"name": "Player2", "score": 800}]):  # Placeholder data
+            player_text = self.font.render(f"{i+1}. {player['name']} - {player['score']} points", True, self.WHITE)
+            self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
+            y_position += 50  # Increase spacing
+
+        # Display random cybersecurity tip
+        tip = "Keep your passwords secret like a superhero's identity!"
+        tip_text = self.font.render(tip, True, self.GREEN)
+        self.screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, self.screen_height - 50))
+
         pygame.display.flip()
         self.wait_for_keypress()
+
         
     def level_complete_screen(self):
         self.screen.fill(self.BLACK)
@@ -328,17 +344,33 @@ class Game:
 
     def show_instructions(self):
         self.screen.fill(self.BLACK)
+    
+        # Smaller title to fit better
+        instructions_title = self.big_font.render("Cybersecurity Mission", True, self.RED)
+        self.screen.blit(instructions_title, (self.screen_width // 2 - instructions_title.get_width() // 2, 30))
+
+        # Use a smaller font for instructions or implement pagination
+        instructions_font = pygame.font.SysFont("Arial", 20)  # Smaller font
+    
         instructions = [
-            "Move with arrow keys, shoot with space bar.",
-            "Defend against enemies with your cybersecurity knowledge.",
-            "Answer questions correctly to survive longer.",
-            "Defeat the boss to win."
+            "- Use Arrow Keys to move away from cyber attacks!",
+            "- Shoot with Spacebar to stop phishing emails!",
+            "- Answer quiz questions to gain extra power!",
+            "- Strong passwords are like secret codes - mix everything!",
+            "- Beware of fakes; not all emails are what they seem!",
+            "- Use Two-Factor Authentication for double protection!"
         ]
-        y_position = 100
-        for line in instructions:
-            instruction_text = self.big_font.render(line, True, self.WHITE)
+    
+        y_position = 80
+        for instruction in instructions:
+            instruction_text = instructions_font.render(instruction, True, self.WHITE)
             self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, y_position))
-            y_position += 50
+            y_position += 30
+
+        # Add navigation for more instructions if needed
+        more_text = instructions_font.render("Press any key to go back!", True, self.YELLOW)
+        self.screen.blit(more_text, (self.screen_width // 2 - more_text.get_width() // 2, self.screen_height - 50))
+
         pygame.display.flip()
         self.wait_for_keypress()
 
