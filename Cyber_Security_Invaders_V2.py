@@ -43,6 +43,7 @@ class Game:
         self.RED = (255, 0, 0)
         self.YELLOW = (255, 255, 0)
         self.BLUE = (0, 0, 128)
+        self.PURPLE = (128, 0, 128)
 
         # Fonts
         self.font = pygame.font.SysFont("Arial", 24)
@@ -320,6 +321,7 @@ class Game:
         self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
     
         # Adjust position and spacing
+        '''PLACEHOLDER - FLASK INTEGRATION SOON'''
         y_position = 100
         for i, player in enumerate([{"name": "Player1", "score": 1000}, {"name": "Player2", "score": 800}]):  # Placeholder data
             player_text = self.font.render(f"{i+1}. {player['name']} - {player['score']} points", True, self.WHITE)
@@ -327,7 +329,7 @@ class Game:
             y_position += 50  # Increase spacing
 
         # Display random cybersecurity tip
-        tip = "Keep your passwords secret like a superhero's identity!"
+        tip = "Press any key to go back!"
         tip_text = self.font.render(tip, True, self.GREEN)
         self.screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, self.screen_height - 50))
 
@@ -368,7 +370,7 @@ class Game:
             y_position += 30
 
         # Add navigation for more instructions if needed
-        more_text = instructions_font.render("Press any key to go back!", True, self.YELLOW)
+        more_text = instructions_font.render("Press any key to go back!", True, self.GREEN)
         self.screen.blit(more_text, (self.screen_width // 2 - more_text.get_width() // 2, self.screen_height - 50))
 
         pygame.display.flip()
@@ -394,6 +396,7 @@ class Player:
         self.x = (game.screen_width - self.width) // 2
         self.y = game.screen_height - self.height - 10
         self.speed = 5
+        self.invulnerable = False
         self.lives = 3
         self.game = game
 
@@ -406,11 +409,11 @@ class Player:
             quit()
 
     def move(self, keys):
-        if keys[pygame.K_LEFT]:
-            self.x -= self.speed
-        if keys[pygame.K_RIGHT]:
-            self.x += self.speed
-        self.x = max(0, min(self.x, self.game.screen_width - self.width))
+        if not self.invulnerable:  # Only move if not invulnerable (e.g., during 'Firewall' effect)
+            if keys[pygame.K_LEFT] and self.x > 0:
+                self.x -= self.speed
+            if keys[pygame.K_RIGHT] and self.x < self.game.screen_width - self.width:
+                self.x += self.speed
 
     def shoot(self, keys):
         current_time = time.time()
@@ -420,6 +423,13 @@ class Player:
 
     def draw(self):
         self.game.screen.blit(self.image, (self.x, self.y))
+        
+    def apply_powerup(self, powerup_type):
+        if powerup_type == 'firewall':
+            self.invulnerable = True
+            pygame.time.set_timer(pygame.USEREVENT + 1, 5000)  # 5 seconds of invulnerability
+        elif powerup_type == 'antivirus':
+            self.game.enemy_manager.clear_enemies()
 
 class Boss:
     def __init__(self, game):
@@ -483,7 +493,11 @@ class Boss:
 class EnemyManager:
     def __init__(self, game):
         self.enemies = []
-        self.enemy_image = self.load_and_scale_image("enemy.png", (40, 40))
+        self.enemy_types = {
+            'virus': {'image': self.load_and_scale_image("virus.png", (40, 40)), 'speed': 2, 'color': game.RED},
+            'worm': {'image': self.load_and_scale_image("worm.png", (40, 40)), 'speed': 3, 'color': game.YELLOW},
+            'ddos': {'image': self.load_and_scale_image("ddos.png", (40, 40)), 'speed': 1, 'color': game.PURPLE}
+        }
         self.enemy_speed = 2
         self.shoot_prob = 0.003
         self.direction = 1
@@ -502,9 +516,21 @@ class EnemyManager:
         self.enemies = []
         for row in range(5):
             for col in range(10):
-                enemy_x = col * (self.enemy_image.get_width() + 10) + 50
-                enemy_y = row * (self.enemy_image.get_height() + 10) + 50
-                self.enemies.append([enemy_x, enemy_y])
+                enemy_type = random.choice(list(self.enemy_types.keys()))
+                enemy_x = col * (40 + 10) + 50
+                enemy_y = row * (40 + 10) + 50
+                self.enemies.append({
+                    'type': enemy_type,
+                    'x': enemy_x,
+                    'y': enemy_y,
+                    'image': self.enemy_types[enemy_type]['image'],
+                    'speed': self.enemy_types[enemy_type]['speed'],
+                    'color': self.enemy_types[enemy_type]['color']
+                })
+
+    def clear_enemies(self):
+        self.enemies.clear()
+        self.create_enemies()
 
     def update(self):
         if not self.enemies:
@@ -519,25 +545,25 @@ class EnemyManager:
 
         edge_reached = False
         for enemy in self.enemies:
-            enemy[0] += self.enemy_speed * self.direction
-            if enemy[0] <= 0 or enemy[0] + 40 >= self.game.screen_width:
+            enemy['x'] += enemy['speed'] * self.direction  
+            if enemy['x'] <= 0 or enemy['x'] + 40 >= self.game.screen_width:
                 edge_reached = True
 
             if random.random() < self.shoot_prob:
-                self.game.bullet_manager.add_enemy_bullet(enemy[0] + 20, enemy[1] + 40)
+                self.game.bullet_manager.add_enemy_bullet(enemy['x'] + 20, enemy['y'] + 40)
 
-            if enemy[1] + 40 >= self.game.screen_height:
+            if enemy['y'] + 40 >= self.game.screen_height:
                 self.game.game_over = True
                 self.game.game_over_screen()
 
         if edge_reached:
             for enemy in self.enemies:
-                enemy[1] += 20
+                enemy['y'] += 20
             self.direction *= -1
 
     def draw(self):
         for enemy in self.enemies:
-            self.game.screen.blit(self.enemy_image, (enemy[0], enemy[1]))
+            self.game.screen.blit(enemy['image'], (enemy['x'], enemy['y']))
 
     def increase_difficulty(self):
         self.enemy_speed += 0.5
@@ -571,9 +597,10 @@ class BulletManager:
             pygame.draw.rect(self.game.screen, self.game.GREEN, (bullet[0], bullet[1], self.bullet_width, self.bullet_height))
             if bullet[1] < 0:
                 self.player_bullets.remove(bullet)
-            
+        
             for enemy in self.game.enemy_manager.enemies[:]:
-                if enemy[0] < bullet[0] < enemy[0] + 40 and enemy[1] < bullet[1] < enemy[1] + 40:
+                # Use dictionary keys to check collision
+                if enemy['x'] < bullet[0] < enemy['x'] + 40 and enemy['y'] < bullet[1] < enemy['y'] + 40:
                     self.player_bullets.remove(bullet)
                     self.game.enemy_manager.enemies.remove(enemy)
                     break
@@ -608,6 +635,35 @@ class BulletManager:
                 self.game.last_hit_time = time.time()
                 return True
         return False
+
+class PowerUpManager:
+    def __init__(self, game):
+        self.powerups = []
+        self.spawn_rate = 0.01  # 1% chance to spawn a powerup per frame
+        self.game = game
+
+    def update(self):
+        if random.random() < self.spawn_rate:
+            powerup_type = random.choice(['firewall', 'antivirus'])
+            self.add_powerup(powerup_type)
+
+        for powerup in self.powerups[:]:
+            powerup[1] += 2  # move downwards
+            if powerup[1] > self.game.screen_height:
+                self.powerups.remove(powerup)
+            else:
+                pygame.draw.circle(self.game.screen, self.game.BLUE if powerup[0] == 'firewall' else self.game.GREEN, (powerup[2], powerup[1]), 10)
+
+            # Check collision with player
+            if (self.game.player.x < powerup[2] < self.game.player.x + self.game.player.width and
+                self.game.player.y < powerup[1] < self.game.player.y + self.game.player.height):
+                self.game.player.apply_powerup(powerup[0])
+                self.powerups.remove(powerup)
+
+    def add_powerup(self, powerup_type):
+        x = random.randint(0, self.game.screen_width - 20)
+        self.powerups.append([powerup_type, 0, x])
+        
 
 def main():
         game = Game()
