@@ -40,6 +40,7 @@ class Game:
         self.start_time = 0
         self.hits = 0
         self.score = 5000
+        self.power_ups = PowerUpManager(self)
 
         # Colors
         self.BLACK = (0, 0, 0)
@@ -92,6 +93,8 @@ class Game:
         self.correct_answer_sound = pygame.mixer.Sound(os.path.join("sounds", "correct.wav"))
         self.wrong_answer_sound = pygame.mixer.Sound(os.path.join("sounds", "wrong.wav"))
         self.level_up_sound = pygame.mixer.Sound(os.path.join("sounds", "level_up.wav"))
+        self.power_up_sound = pygame.mixer.Sound(os.path.join("sounds", "power_up.wav"))
+
 
     def main_game_loop(self):
         self.start_time = time.time()
@@ -109,7 +112,7 @@ class Game:
 
             current_time = time.time()
             elapsed_time = current_time - self.start_time
-            self.score = 5000 - (int(elapsed_time) * 50) - (self.hits * 250)  # 50 points per second, 250 per hit
+            self.score = 5000 - (int(elapsed_time) * 25) - (self.hits * 250)  # 50 points per second, 250 per hit
             self.score = max(0, self.score)  # Ensure score doesn't go below 0
 
             if self.boss_fight:
@@ -127,9 +130,9 @@ class Game:
                 player_hit = self.bullet_manager.check_player_hit()
                 self.power_ups.update()
                 if player_hit:
+                    self.hit_sound.play()
                     if not self.ask_cybersecurity_question():
                         self.player.lives -= 1
-                        self.hit_sound.play()
                         if self.player.lives == 0:
                             self.game_over_screen()
 
@@ -153,14 +156,27 @@ class Game:
         self.screen.blit(level_text, (self.screen_width - level_text.get_width() - boss_text.get_width() - 10, 10))
         self.screen.blit(boss_text, (self.screen_width - boss_text.get_width() - 10, 10))
 
-        # Draw power-up notification
+        # Draw power-up notification only if active
         if self.power_ups.power_up_active:
             power_up_text = self.font.render("Power Up!", True, self.YELLOW)
             self.screen.blit(power_up_text, (self.screen_width // 2 - power_up_text.get_width() // 2, 10))
+            
+            # Display the name of the active power-up
+            if self.power_ups.current_power_up == 'Laser':
+                color = self.RED
+            elif self.power_ups.current_power_up == 'Shield':
+                color = self.BLUE
+            elif self.power_ups.current_power_up == 'Score Multiplier':
+                color = self.GREEN
+            else:
+                color = self.WHITE  # Default color if no matching power-up found
+            
+            power_up_name = self.font.render(self.power_ups.current_power_up.capitalize(), True, color)
+            self.screen.blit(power_up_name, (self.screen_width // 2 - power_up_name.get_width() // 2, 40))
 
     def clear_bullets(self):
         """
-        Clears all bullets from the game screen to allow a fresh start after answering a question.
+        Clears all bullets from the game screen to allow a fresh start after answering a question or level completion.
         """
         self.bullet_manager.player_bullets.clear()
         self.bullet_manager.enemy_bullets.clear()
@@ -237,6 +253,7 @@ class Game:
             self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, self.screen_height // 2 + 150))
             pygame.display.flip()
 
+
     def wrap_text(self, text, font, max_width):
         words = text.split(' ')
         lines = []
@@ -272,6 +289,11 @@ class Game:
             GPIO.output(RED_LED_PIN, GPIO.LOW)
 
     def boss_fight_splash_screen(self):
+        # Clear player bullets and deactivate power-ups
+        self.clear_bullets()
+        self.power_ups.power_up_active = False
+        self.power_ups.current_power_up = None  # Reset current power-up
+
         self.screen.fill(self.BLACK)
         boss_fight_text = self.bold_font.render("Boss Fight!", True, self.RED)
         self.screen.blit(boss_fight_text, (self.screen_width // 2 - boss_fight_text.get_width() // 2, self.screen_height // 2 - 100))
@@ -441,6 +463,12 @@ class Game:
         complete_text = self.bold_font.render(f"Level {self.level - 1} Complete!", True, self.GREEN)
         self.screen.blit(complete_text, (self.screen_width // 2 - complete_text.get_width() // 2, self.screen_height // 2 - complete_text.get_height() // 2))
         self.level_up_sound.play()
+        
+        # Clear player bullets and deactivate power-ups
+        self.clear_bullets()
+        self.power_ups.power_up_active = False
+        self.power_ups.current_power_up = None  # Reset current power-up
+
         pygame.display.flip()
         pygame.time.wait(2000)  # Show for 2 seconds
 
@@ -487,6 +515,8 @@ class Game:
         self.enemy_manager.create_enemies()
         self.hits = 0  # Reset hits
         self.score = 5000  # Reset score
+        self.power_ups.power_up_active = False
+        self.power_ups.current_power_up = None  # Clear any active power-up
         self.main_game_loop()
 
     def end_game_screen(self):
@@ -565,6 +595,11 @@ class Player:
         self.speed = 5
         self.lives = 3
         self.game = game
+        self.invulnerable = False  # Initialize invulnerability state
+        self.invulnerable_timer = 0
+        self.invulnerable_duration = 5  # Duration in seconds for invulnerability
+        self.shield_outline = self.create_shield_outline()
+
 
     def load_and_scale_image(self, filename, size):
         try:
@@ -573,6 +608,34 @@ class Player:
             print(f"Error loading or scaling image '{filename}': {e}")
             pygame.quit()
             quit()
+
+    def create_shield_outline(self):
+        outline_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        player_mask = pygame.mask.from_surface(self.image)
+        dark_blue = (44, 44, 169, 255)  # Darker blue for the outline
+
+        for x in range(self.width):
+            for y in range(self.height):
+                if player_mask.get_at((x, y)):
+                    # Check if this pixel is on or near the edge of the shape
+                    for dx in range(-2, 3):  # Check 2 pixels in each direction
+                        for dy in range(-2, 3):
+                            nx, ny = x + dx, y + dy
+                            if 0 <= nx < self.width and 0 <= ny < self.height and not player_mask.get_at((nx, ny)):
+                                # Set color for a thicker outline
+                                outline_surface.set_at((x, y), dark_blue)
+                                # Optionally, set color for adjacent pixels to make it even thicker
+                                for i in range(-1, 2):
+                                    for j in range(-1, 2):
+                                        nx2, ny2 = x + i, y + j
+                                        if 0 <= nx2 < self.width and 0 <= ny2 < self.height:
+                                            outline_surface.set_at((nx2, ny2), dark_blue)
+                                break  # Break after setting one outline pixel to prevent overwriting
+                        else:
+                            continue
+                        break
+
+        return outline_surface    
 
     def move(self, keys):
         if keys[pygame.K_LEFT]:
@@ -583,13 +646,30 @@ class Player:
 
     def shoot(self, keys):
         current_time = time.time()
-        if keys[pygame.K_SPACE] and current_time - self.game.bullet_manager.last_shot_time >= self.game.bullet_manager.shoot_interval:
+        if keys[pygame.K_SPACE] and current_time - self.game.bullet_manager.last_shot_time >= self.game.bullet_manager.player_shoot_interval:
             self.game.bullet_manager.add_player_bullet(self.x + self.width // 2, self.y)
             self.game.bullet_manager.last_shot_time = current_time
             self.game.shoot_sound.play()
 
     def draw(self):
         self.game.screen.blit(self.image, (self.x, self.y))
+        
+        if self.invulnerable:
+            # Draw the flashing shield outline
+            if int(time.time() * 5) % 2 == 0:  # Flash every 0.2 seconds
+                self.game.screen.blit(self.shield_outline, (self.x, self.y))
+                
+    def set_invulnerable(self, duration=None):
+        self.invulnerable = True
+        self.invulnerable_timer = time.time()
+        if duration:
+            self.invulnerable_duration = duration
+            
+    def check_invulnerability(self):
+        if self.invulnerable:
+            current_time = time.time()
+            if current_time - self.invulnerable_timer >= self.invulnerable_duration:
+                self.invulnerable = False
 
 class Boss:
     def __init__(self, game):
@@ -719,15 +799,16 @@ class BulletManager:
         self.enemy_bullets = []
         self.boss_bullets = []
         self.bullet_width = 5
-        self.bullet_height = 10
-        self.bullet_speed = 7
+        self.player_bullet_height = 10  # Default height for player bullets
+        self.enemy_bullet_height = 10   # New attribute for enemy bullet height
+        self.player_bullet_speed = 7
         self.enemy_bullet_speed = 5
+        self.player_shoot_interval = 0.2  # Default shoot interval for player
         self.last_shot_time = 0
-        self.shoot_interval = 0.05
         self.game = game
 
     def add_player_bullet(self, x, y):
-        self.player_bullets.append([x, y])
+        self.player_bullets.append([x, y, self.player_bullet_height])
 
     def add_enemy_bullet(self, x, y):
         self.enemy_bullets.append([x, y])
@@ -737,8 +818,8 @@ class BulletManager:
 
     def update_player_bullets(self):
         for bullet in self.player_bullets[:]:
-            bullet[1] -= self.bullet_speed
-            pygame.draw.rect(self.game.screen, self.game.GREEN, (bullet[0], bullet[1], self.bullet_width, self.bullet_height))
+            bullet[1] -= self.player_bullet_speed
+            pygame.draw.rect(self.game.screen, self.game.GREEN, (bullet[0], bullet[1], self.bullet_width, bullet[2]))
             if bullet[1] < 0:
                 self.player_bullets.remove(bullet)
             
@@ -751,32 +832,46 @@ class BulletManager:
     def update_enemy_bullets(self):
         for bullet in self.enemy_bullets[:]:
             bullet[1] += self.enemy_bullet_speed
-            pygame.draw.rect(self.game.screen, self.game.RED, (bullet[0], bullet[1], self.bullet_width, self.bullet_height))
+            pygame.draw.rect(self.game.screen, self.game.RED, (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
             if bullet[1] > self.game.screen_height:
                 self.enemy_bullets.remove(bullet)
+                
+            if self.game.player.invulnerable and \
+                   self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
+                   self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
+                    self.enemy_bullets.remove(bullet)  # Bullet is removed if it hits the shield
 
         for bullet in self.boss_bullets[:]:
             bullet[1] += self.enemy_bullet_speed * 2  # Boss bullets are faster
-            pygame.draw.rect(self.game.screen, self.game.YELLOW, (bullet[0], bullet[1], self.bullet_width, self.bullet_height))
+            pygame.draw.rect(self.game.screen, self.game.YELLOW, (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
             if bullet[1] > self.game.screen_height:
                 self.boss_bullets.remove(bullet)
+                
+            # Check if boss bullet hits the player's shield
+            if self.game.player.invulnerable and \
+               self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
+               self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
+                self.boss_bullets.remove(bullet)  # Bullet is removed if it hits the shield
+        
 
     def check_player_hit(self):
         for bullet in self.enemy_bullets[:]:
-            if self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
-               self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
-                self.enemy_bullets.remove(bullet)
-                self.game.last_hit_time = time.time()
-                return True
+            if (self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and 
+                self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height):
+                if not self.game.player.invulnerable:
+                    self.enemy_bullets.remove(bullet)
+                    self.game.last_hit_time = time.time()
+                    return True
         return False
 
     def check_player_hit_by_boss_bullet(self):
         for bullet in self.boss_bullets[:]:
-            if self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
-               self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
-                self.boss_bullets.remove(bullet)
-                self.game.last_hit_time = time.time()
-                return True
+            if (self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and 
+                self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height):
+                if not self.game.player.invulnerable:
+                    self.boss_bullets.remove(bullet)
+                    self.game.last_hit_time = time.time()
+                    return True
         return False
 
 class PowerUpManager:
@@ -787,7 +882,7 @@ class PowerUpManager:
         self.spawn_interval = 15
         self.power_up_active = False
         self.power_up_timer = 0
-        
+        self.current_power_up = None  # Track the current power-up type
 
     def update(self):
         current_time = time.time()
@@ -809,12 +904,7 @@ class PowerUpManager:
 
         if self.power_up_active:
             if current_time - self.power_up_timer > 5:  # Power-up lasts for 5 seconds
-                self.power_up_active = False
-                self.game.bullet_manager.player_bullets.clear()
-                self.game.bullet_manager.shoot_interval = 0.2  # Reset shoot interval
-                self.game.bullet_manager.bullet_speed = 7
-                self.game.bullet_manager.bullet_height = 10
-                
+                self.reset_power_up()
 
     def spawn_power_up(self):
         x = random.randint(0, self.game.screen_width - 20)  # Adjust size to match power-up visual
@@ -824,9 +914,32 @@ class PowerUpManager:
     def apply_power_up(self):
         self.power_up_active = True
         self.power_up_timer = time.time()
-        self.game.bullet_manager.shoot_interval = 0.005  # Increase shooting speed
-        self.game.bullet_manager.bullet_speed = 35
+        
+        power_up_types = ['Laser', 'Shield', 'Score Multiplier']
+        self.current_power_up = random.choice(power_up_types)
+        
+        if self.current_power_up == 'Laser':
+            self.game.bullet_manager.player_bullet_height = 30
+            self.game.bullet_manager.player_bullet_speed = 35
+            self.game.bullet_manager.player_shoot_interval = 0.005
+        elif self.current_power_up == 'Shield':
+            self.game.player.invulnerable = True
+        elif self.current_power_up == 'Score Multiplier':
+            self.game.score_multiplier = 2
+        
         self.game.score += 100  # Bonus points for collecting power-up
+        self.game.power_up_sound.play()
+
+    def reset_power_up(self):
+        self.power_up_active = False
+        self.game.bullet_manager.player_bullet_height = 10
+        self.game.bullet_manager.player_bullet_speed = 7
+        self.game.bullet_manager.player_shoot_interval = 0.2
+        if 'Shield' == self.current_power_up:
+            self.game.player.invulnerable = False
+        if 'Score Multiplier' == self.current_power_up:
+            self.game.score_multiplier = 1
+        self.current_power_up = None
 
 
 def main():
