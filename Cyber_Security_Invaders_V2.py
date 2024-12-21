@@ -153,6 +153,11 @@ class Game:
         self.screen.blit(level_text, (self.screen_width - level_text.get_width() - boss_text.get_width() - 10, 10))
         self.screen.blit(boss_text, (self.screen_width - boss_text.get_width() - 10, 10))
 
+        # Draw power-up notification
+        if self.power_ups.power_up_active:
+            power_up_text = self.font.render("Power Up!", True, self.YELLOW)
+            self.screen.blit(power_up_text, (self.screen_width // 2 - power_up_text.get_width() // 2, 10))
+
     def clear_bullets(self):
         """
         Clears all bullets from the game screen to allow a fresh start after answering a question.
@@ -646,14 +651,14 @@ class BulletManager:
         return False
 
 class PowerUpManager:
-    def load_sounds(self):
-        self.power_up_sound = pygame.mixer.Sound(os.path.join("sounds", "power_up.wav"))
-        
     def __init__(self, game):
         self.power_ups = []
         self.game = game
         self.spawn_time = 0
         self.spawn_interval = 15
+        self.power_up_active = False
+        self.power_up_timer = 0
+        
 
     def update(self):
         current_time = time.time()
@@ -673,17 +678,27 @@ class PowerUpManager:
                 self.power_ups.remove(power_up)
                 self.apply_power_up()
 
+        if self.power_up_active:
+            if current_time - self.power_up_timer > 5:  # Power-up lasts for 5 seconds
+                self.power_up_active = False
+                self.game.bullet_manager.player_bullets.clear()
+                self.game.bullet_manager.shoot_interval = 0.2  # Reset shoot interval
+                self.game.bullet_manager.bullet_speed = 7
+                self.game.bullet_manager.bullet_height = 10
+                
+
     def spawn_power_up(self):
         x = random.randint(0, self.game.screen_width - 20)  # Adjust size to match power-up visual
         y = 0
         self.power_ups.append([x, y])
 
     def apply_power_up(self):
-        self.load_sounds()
-        self.power_up_sound.play()
-        # Example: Give an extra life
-        self.game.player.lives += 1
+        self.power_up_active = True
+        self.power_up_timer = time.time()
+        self.game.bullet_manager.shoot_interval = 0.005  # Increase shooting speed
+        self.game.bullet_manager.bullet_speed = 35
         self.game.score += 100  # Bonus points for collecting power-up
+
 
 def main():
     game = Game()
