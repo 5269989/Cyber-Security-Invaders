@@ -207,11 +207,11 @@ class Game:
                     if event.key == pygame.K_RETURN:
                         selected_answer = chr(pygame.K_a + selected_index).upper()
                         if selected_answer == correct_answer:
-                            self.display_feedback("Correct!", self.GREEN)
                             self.correct_answer_sound.play()
+                            self.display_feedback("Correct!", self.GREEN)
                         else:
-                            self.display_feedback("Incorrect!", self.RED)
                             self.wrong_answer_sound.play()
+                            self.display_feedback("Incorrect!", self.RED)
                         self.hits += 1  # Increment hits every time hit no matter the answer
                         self.clear_bullets()
                         return True  # Return true to indicate question was answered
@@ -392,8 +392,49 @@ class Game:
         self.end_game_screen()  # Changed to show end game screen for score input
 
     def show_leaderboard(self):
-        # Implementation remains the same
-        pass
+        self.screen.fill(self.BLACK)
+        leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
+        self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
+    
+        smaller_font = pygame.font.SysFont("Arial", 22)  # Smaller font for more entries
+        y_position = 100
+
+        # Load, sort, and trim scores to top 10
+        scores = []
+        try:
+            with open('Leaderboard.txt', 'r') as file:
+                for line in file:
+                    entry = line.strip().split(':')
+                    if len(entry) == 2:
+                        scores.append((entry[0], int(entry[1])))
+        
+            # Sort scores from highest to lowest
+            scores.sort(key=lambda x: x[1], reverse=True)
+        
+            # Keep only top 10 scores
+            if len(scores) > 10:
+                scores = scores[:10]
+
+            # Write back to file
+            with open('Leaderboard.txt', 'w') as file:
+                for player, score in scores:
+                    file.write(f"{player}:{score}\n")
+
+            # Display on screen
+            for i, (player, score) in enumerate(scores):
+                player_text = smaller_font.render(f"{i+1}. {player} - {score} points", True, self.WHITE)
+                self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
+                y_position += 40  # Reduced space between entries
+        except FileNotFoundError:
+            no_score_text = smaller_font.render("No scores yet!", True, self.WHITE)
+            self.screen.blit(no_score_text, (self.screen_width // 2 - no_score_text.get_width() // 2, y_position))
+
+        tip = "Press any key to go back!"
+        tip_text = self.font.render(tip, True, self.GREEN)
+        self.screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, self.screen_height - 50))
+
+        pygame.display.flip()
+        self.wait_for_keypress()
 
     def level_complete_screen(self):
         self.screen.fill(self.BLACK)
@@ -404,8 +445,33 @@ class Game:
         pygame.time.wait(2000)  # Show for 2 seconds
 
     def show_instructions(self):
-        # Implementation remains the same
-        pass
+        self.screen.fill(self.BLACK)
+    
+        instructions_title = self.big_font.render("Cybersecurity Mission", True, self.RED)
+        self.screen.blit(instructions_title, (self.screen_width // 2 - instructions_title.get_width() // 2, 30))
+
+        instructions_font = pygame.font.SysFont("Arial", 20)
+    
+        instructions = [
+            "- Use Arrow Keys to move away from cyber attacks!",
+            "- Shoot with Spacebar to stop phishing emails!",
+            "- Answer quiz questions to mitigate damage!",
+            "- Strong passwords are like secret codes - mix everything!",
+            "- Beware of fakes; not all emails are what they seem!",
+            "- Use Two-Factor Authentication for double protection!"
+        ]
+    
+        y_position = 80
+        for instruction in instructions:
+            instruction_text = instructions_font.render(instruction, True, self.WHITE)
+            self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, y_position))
+            y_position += 30
+
+        more_text = instructions_font.render("Press any key to go back!", True, self.YELLOW)
+        self.screen.blit(more_text, (self.screen_width // 2 - more_text.get_width() // 2, self.screen_height - 50))
+
+        pygame.display.flip()
+        self.wait_for_keypress()
 
     def reset_game(self):
         # Reset game state
@@ -424,8 +490,71 @@ class Game:
         self.main_game_loop()
 
     def end_game_screen(self):
-        # Implementation remains the same
-        pass
+        self.screen.fill(self.BLACK)
+    
+        # Game Over Text
+        end_text = self.bold_font.render(f"Game Over! Your Score is: {self.score}", True, self.YELLOW)
+        self.screen.blit(end_text, (self.screen_width // 2 - end_text.get_width() // 2, self.screen_height // 3 - end_text.get_height() // 2))
+    
+        # Name Prompt
+        name_prompt = self.big_font.render("Enter your name (3 letters):", True, self.WHITE)
+        self.screen.blit(name_prompt, (self.screen_width // 2 - name_prompt.get_width() // 2, self.screen_height // 2 - 30))
+
+        # Input Box
+        input_box = pygame.Rect(self.screen_width // 2 + 0, self.screen_height // 2 + 30, 50, 32)
+        color_inactive = pygame.Color('lightskyblue3')
+        color_active = pygame.Color(self.GREEN)
+        color = color_active  # Active by default
+        text = ''
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        if len(text) == 3:
+                            self.save_score(text.upper(), self.score)
+                            return
+                    elif event.key == pygame.K_BACKSPACE:
+                        text = text[:-1]
+                    elif len(text) < 3 and event.unicode.isalpha():
+                        text += event.unicode
+
+            # Draw input box
+            pygame.draw.rect(self.screen, color, input_box)
+        
+            # Draw text inside the box
+            txt_surface = self.font.render(text, True, self.BLACK)
+            width = max(30, txt_surface.get_width()+10)
+            input_box.w = width
+            self.screen.blit(txt_surface, (input_box.x+5, input_box.y+5))
+
+            pygame.display.flip()
+            
+    def save_score(self, name, score):
+        scores = []
+        try:
+            with open('Leaderboard.txt', 'r') as file:
+                for line in file:
+                    entry = line.strip().split(':')
+                    if len(entry) == 2:
+                        scores.append((entry[0], int(entry[1])))
+        except FileNotFoundError:
+            pass  # File doesn't exist, start with empty list
+
+        scores.append((name, score))
+        scores.sort(key=lambda x: x[1], reverse=True)  # Sort by score from highest to lowest
+        if len(scores) > 10:
+            scores = scores[:10]  # Keep only top 10 scores
+
+        with open('Leaderboard.txt', 'w') as file:
+            for player, score in scores:
+                file.write(f"{player}:{score}\n")
+
+        self.show_menu()  # Return to main menu after saving score
+        
 
 class Player:
     def __init__(self, game):
