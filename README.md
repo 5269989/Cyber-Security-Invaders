@@ -33,7 +33,7 @@
 4. **Install dependencies:**
 - Ensure Pygame and Flask are installed. If not, install them using:
   ```
-  pip install pygame flask
+  pip install pygame/flask
   ```
 - If you're using a Raspberry Pi and want GPIO integration:
   ```
