@@ -4,6 +4,9 @@ import time
 import os
 import platform
 import json
+import math
+import requests
+
 
 # Check if running on a Raspberry Pi
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
@@ -30,7 +33,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.game_over = False
         self.level = 1
-        self.total_levels = 3
+        self.total_levels = 2
         self.boss_fight = False
         self.question_limit = 3
         self.questions_asked = 0
@@ -49,6 +52,7 @@ class Game:
         self.RED = (255, 0, 0)
         self.YELLOW = (255, 255, 0)
         self.BLUE = (0, 0, 128)
+        self.LIGHTBLUE = (60, 60 , 255)
 
         # Fonts
         self.font = pygame.font.SysFont("Arial", 24)
@@ -95,46 +99,61 @@ class Game:
         self.level_up_sound = pygame.mixer.Sound(os.path.join("sounds", "level_up.wav"))
         self.power_up_sound = pygame.mixer.Sound(os.path.join("sounds", "power_up.wav"))
 
-
     def main_game_loop(self):
         self.start_time = time.time()
+        last_score_update_time = self.start_time
+        score_paused = False
         while not self.game_over:
             self.screen.fill(self.BLACK)
-            
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     quit()
+                elif event.type == pygame.USEREVENT + 1:
+                    # Only clear the adjustment if no new adjustment has been made
+                    if hasattr(self, 'score_adjustment') and time.time() - self.score_adjustment_time >= 2:  # Only clear after 2 seconds
+                        del self.score_adjustment
 
             keys = pygame.key.get_pressed()
             self.player.move(keys)
             self.player.shoot(keys)
 
             current_time = time.time()
-            elapsed_time = current_time - self.start_time
-            self.score = 5000 - (int(elapsed_time) * 25) - (self.hits * 250)  # 50 points per second, 250 per hit
-            self.score = max(0, self.score)  # Ensure score doesn't go below 0
+            elapsed_time = current_time - last_score_update_time
+    
+            if not score_paused:
+                if elapsed_time >= 1:  # Update score every second
+                    self.score -= 25  # Deduct 25 points per second
+                    self.score = max(0, self.score)  # Ensure score doesn't go below 0
+                    last_score_update_time = current_time  # Reset for next frame
+
+            self.player.check_invulnerability()
 
             if self.boss_fight:
                 player_hit = self.boss.update()
                 self.boss.check_hit_by_player()
                 if player_hit:
+                    score_paused = True
                     if not self.ask_cybersecurity_question():
                         self.player.lives -= 1
-                        self.hit_sound.play()
+                        self.adjust_score(-250)
                         if self.player.lives == 0:
                             self.game_over_screen()
+                    score_paused = False
             else:
                 self.enemy_manager.update()
                 self.enemy_manager.draw()
                 player_hit = self.bullet_manager.check_player_hit()
                 self.power_ups.update()
                 if player_hit:
+                    score_paused = True
                     self.hit_sound.play()
                     if not self.ask_cybersecurity_question():
                         self.player.lives -= 1
+                        self.adjust_score(-250)
                         if self.player.lives == 0:
                             self.game_over_screen()
+                    score_paused = False
 
             self.player.draw()
             self.bullet_manager.update_player_bullets()
@@ -160,20 +179,37 @@ class Game:
         if self.power_ups.power_up_active:
             power_up_text = self.font.render("Power Up!", True, self.YELLOW)
             self.screen.blit(power_up_text, (self.screen_width // 2 - power_up_text.get_width() // 2, 10))
-            
+        
             # Display the name of the active power-up
             if self.power_ups.current_power_up == 'Laser':
                 color = self.RED
             elif self.power_ups.current_power_up == 'Shield':
-                color = self.BLUE
+                color = self.LIGHTBLUE
             elif self.power_ups.current_power_up == 'Score Multiplier':
                 color = self.GREEN
             else:
-                color = self.WHITE  # Default color if no matching power-up found
-            
+                color = self.WHITE  
             power_up_name = self.font.render(self.power_ups.current_power_up.capitalize(), True, color)
             self.screen.blit(power_up_name, (self.screen_width // 2 - power_up_name.get_width() // 2, 40))
+    
+        # Display score adjustments
+        if hasattr(self, 'score_adjustment'):
+            adjust_text = self.font.render(self.score_adjustment, True, self.RED if self.score_adjustment[0] == '-' else self.GREEN)
+            self.screen.blit(adjust_text, (score_text.get_width() + 20, 40))
 
+
+    def adjust_score(self, points):
+        self.score = max(0, self.score + points)  # Ensure score is non-negative
+    
+        if points != 0:
+            self.score_adjustment = f"{points:+d}"  # Store the adjustment for display
+            self.score_adjustment_time = time.time()
+        
+            # Clear existing timer and set a new one
+            pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Clear existing timer
+            pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Set new timer for 2 seconds
+
+        
     def clear_bullets(self):
         """
         Clears all bullets from the game screen to allow a fresh start after answering a question or level completion.
@@ -183,15 +219,20 @@ class Game:
         self.bullet_manager.boss_bullets.clear()
 
     def ask_cybersecurity_question(self):
-        if self.questions_asked >= self.question_limit:
+        """
+        Displays a cybersecurity question and handles user input for answering.
+        Returns True if the answer is correct, False otherwise.
+        """
+        # Ensure there are available questions
+        if self.questions_asked >= self.question_limit or not self.cybersecurity_questions:
             return False
 
         self.questions_asked += 1
         available_questions = [q for q in self.cybersecurity_questions if q not in self.asked_questions]
-
         if not available_questions:
             return False
 
+        # Select a question
         question_data = random.choice(available_questions)
         self.asked_questions.append(question_data)
 
@@ -199,62 +240,63 @@ class Game:
         options = question_data["options"]
         correct_answer = question_data["answer"]
 
-        question_lines = self.wrap_text(question, self.big_font, self.screen_width - 40)
-        self.screen.fill(self.BLACK)
-
-        total_text_height = len(question_lines) * self.big_font.get_linesize()
-        y_offset = self.screen_height // 2 - 150 - total_text_height // 2
-        for i, line in enumerate(question_lines):
-            question_text = self.big_font.render(line, True, self.WHITE)
-            self.screen.blit(question_text, (self.screen_width // 2 - question_text.get_width() // 2, y_offset + i * self.big_font.get_linesize()))
-
-        instruction_text = self.font.render("Use arrow keys to select and Enter to submit", True, self.WHITE)
-        self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, self.screen_height // 2 + 100))
-
-        pygame.display.flip()
-
+        # Prepare to display the question
         selected_index = 0
-        while True:
+        running = True
+        while running:
+            # Handle events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     quit()
-                if event.type == pygame.KEYDOWN:
+                elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
+                        # Check the selected answer
                         selected_answer = chr(pygame.K_a + selected_index).upper()
                         if selected_answer == correct_answer:
                             self.correct_answer_sound.play()
                             self.display_feedback("Correct!", self.GREEN)
+                            self.clear_bullets()
+                            return True
                         else:
                             self.wrong_answer_sound.play()
                             self.display_feedback("Incorrect!", self.RED)
-                        self.hits += 1  # Increment hits every time hit no matter the answer
-                        self.clear_bullets()
-                        return True  # Return true to indicate question was answered
-                    elif event.key == pygame.K_DOWN:
-                        selected_index = (selected_index + 1) % len(options)
+                            self.clear_bullets()
+                            return False
                     elif event.key == pygame.K_UP:
                         selected_index = (selected_index - 1) % len(options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_index = (selected_index + 1) % len(options)
 
+            # Render the question and options
             self.screen.fill(self.BLACK)
+
+            # Render the question
+            question_lines = self.wrap_text(question, self.big_font, self.screen_width - 40)
+            total_text_height = len(question_lines) * self.big_font.get_linesize()
+            question_y_start = self.screen_height // 3 - total_text_height // 2
             for i, line in enumerate(question_lines):
                 question_text = self.big_font.render(line, True, self.WHITE)
-                self.screen.blit(question_text, (self.screen_width // 2 - question_text.get_width() // 2, y_offset + i * self.big_font.get_linesize()))
+                self.screen.blit(question_text, (self.screen_width // 2 - question_text.get_width() // 2, question_y_start + i * self.big_font.get_linesize()))
 
-            option_y_start = self.screen_height // 2 - 50
+            # Render the options
+            options_y_start = self.screen_height // 2
             for i, option in enumerate(options):
                 color = self.GREEN if i == selected_index else self.WHITE
-                option_lines = self.wrap_text(option, self.font, self.screen_width - 40)
-                for j, line in enumerate(option_lines):
-                    option_text = self.font.render(line, True, color)
-                    line_y = option_y_start + i * 60 + j * self.font.get_linesize()
-                    self.screen.blit(option_text, (self.screen_width // 2 - option_text.get_width() // 2, line_y))
+                option_text = self.font.render(option, True, color)
+                self.screen.blit(option_text, (self.screen_width // 2 - option_text.get_width() // 2, options_y_start + i * 40))
 
-            self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, self.screen_height // 2 + 150))
+            # Render the instruction
+            instruction_text = self.font.render("Use UP/DOWN to select, ENTER to confirm.", True, self.YELLOW)
+            self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, self.screen_height - 50))
+
+            # Update the display
             pygame.display.flip()
 
-
     def wrap_text(self, text, font, max_width):
+        """
+        Splits text into lines that fit within a given width.
+        """
         words = text.split(' ')
         lines = []
         current_line = ''
@@ -291,9 +333,8 @@ class Game:
     def boss_fight_splash_screen(self):
         # Clear player bullets and deactivate power-ups
         self.clear_bullets()
-        self.power_ups.power_up_active = False
-        self.power_ups.current_power_up = None  # Reset current power-up
-
+        self.power_ups.reset_power_up()
+        
         self.screen.fill(self.BLACK)
         boss_fight_text = self.bold_font.render("Boss Fight!", True, self.RED)
         self.screen.blit(boss_fight_text, (self.screen_width // 2 - boss_fight_text.get_width() // 2, self.screen_height // 2 - 100))
@@ -364,16 +405,6 @@ class Game:
                             return
                         elif menu_options[selected_option] == "Leaderboard":
                             self.show_leaderboard()
-                        elif menu_options[selected_option] == "Instructions":
-                            self.show_instructions()
-                        elif menu_options[selected_option] == "Save Game":
-                            self.save_game()
-                        elif menu_options[selected_option] == "Load Game":
-                            if self.load_game():
-                                return  # Return if game loaded successfully
-                        elif menu_options[selected_option] == "Exit":
-                            pygame.quit()
-                            quit()
                             
     def save_game(self):
         game_state = {
@@ -412,51 +443,57 @@ class Game:
         pygame.display.flip()
         pygame.time.wait(2000)  # Show for 2 seconds
         self.end_game_screen()  # Changed to show end game screen for score input
-
+        self.power_ups.reset_power_up()
+        
+    def check_server_availability(self):
+        try:
+            response = requests.get("http://localhost:5000/leaderboard", timeout=5)
+            return response.status_code == 200
+        except requests.RequestException:
+            return False
+        
     def show_leaderboard(self):
         self.screen.fill(self.BLACK)
         leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
         self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
     
-        smaller_font = pygame.font.SysFont("Arial", 22)  # Smaller font for more entries
+        smaller_font = pygame.font.SysFont("Arial", 22)
         y_position = 100
 
-        # Load, sort, and trim scores to top 10
-        scores = []
-        try:
-            with open('Leaderboard.txt', 'r') as file:
-                for line in file:
-                    entry = line.strip().split(':')
-                    if len(entry) == 2:
-                        scores.append((entry[0], int(entry[1])))
-        
-            # Sort scores from highest to lowest
-            scores.sort(key=lambda x: x[1], reverse=True)
-        
-            # Keep only top 10 scores
-            if len(scores) > 10:
-                scores = scores[:10]
-
-            # Write back to file
-            with open('Leaderboard.txt', 'w') as file:
-                for player, score in scores:
-                    file.write(f"{player}:{score}\n")
-
-            # Display on screen
-            for i, (player, score) in enumerate(scores):
-                player_text = smaller_font.render(f"{i+1}. {player} - {score} points", True, self.WHITE)
-                self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
-                y_position += 40  # Reduced space between entries
-        except FileNotFoundError:
-            no_score_text = smaller_font.render("No scores yet!", True, self.WHITE)
-            self.screen.blit(no_score_text, (self.screen_width // 2 - no_score_text.get_width() // 2, y_position))
+        if self.check_server_availability():
+            try:
+                response = requests.get("http://localhost:5000/leaderboard", timeout=5)
+                if response.status_code == 200:
+                    leaderboard_data = response.json()
+                    for i, entry in enumerate(leaderboard_data):
+                        player_text = smaller_font.render(f"{i+1}. {entry['player']} - {entry['score']} points", True, self.WHITE)
+                        self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
+                        y_position += 40
+                else:
+                    raise Exception("Failed to retrieve leaderboard")
+            except Exception as e:
+                error_text = smaller_font.render(f"Error: {str(e)}", True, self.RED)
+                self.screen.blit(error_text, (self.screen_width // 2 - error_text.get_width() // 2, y_position))
+        else:
+            error_text = smaller_font.render("Server is not available", True, self.RED)
+            self.screen.blit(error_text, (self.screen_width // 2 - error_text.get_width() // 2, y_position))
 
         tip = "Press any key to go back!"
         tip_text = self.font.render(tip, True, self.GREEN)
         self.screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, self.screen_height - 50))
 
-        pygame.display.flip()
-        self.wait_for_keypress()
+        pygame.display.flip()  # Update the display
+
+        # Wait for a key press before returning to the menu
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    waiting = False
+        self.show_menu()  # Return to the menu after viewing the leaderboard
 
     def level_complete_screen(self):
         self.screen.fill(self.BLACK)
@@ -466,8 +503,9 @@ class Game:
         
         # Clear player bullets and deactivate power-ups
         self.clear_bullets()
-        self.power_ups.power_up_active = False
-        self.power_ups.current_power_up = None  # Reset current power-up
+        self.power_ups.reset_power_up()  # Reset power-ups
+        self.power_ups.spawn_time = time.time()  # Reset spawn timer
+        self.power_ups.spawn_power_up()  # Spawn a new power-up
 
         pygame.display.flip()
         pygame.time.wait(2000)  # Show for 2 seconds
@@ -475,34 +513,66 @@ class Game:
     def show_instructions(self):
         self.screen.fill(self.BLACK)
     
-        instructions_title = self.big_font.render("Cybersecurity Mission", True, self.RED)
-        self.screen.blit(instructions_title, (self.screen_width // 2 - instructions_title.get_width() // 2, 30))
+        # Title
+        title = self.big_font.render("Instructions", True, self.YELLOW)
+        title_x = self.screen_width // 2 - title.get_width() // 2
+        self.screen.blit(title, (title_x, 20))
 
-        instructions_font = pygame.font.SysFont("Arial", 20)
-    
+        # Instructions
         instructions = [
-            "- Use Arrow Keys to move away from cyber attacks!",
-            "- Shoot with Spacebar to stop phishing emails!",
-            "- Answer quiz questions to mitigate damage!",
-            "- Strong passwords are like secret codes - mix everything!",
-            "- Beware of fakes; not all emails are what they seem!",
-            "- Use Two-Factor Authentication for double protection!"
+            ("Controls", "Use arrow keys to move, Spacebar to shoot"),
+            ("Objective", "Survive waves of cyber enemies by shooting them down"),
+            ("Health", "Lose lives when hit; answer questions to mitigate damage"),
+            ("Levels", f"Progress through {self.total_levels} levels to face the Boss"),
+            ("Scoring", "Score decreases over time but increases with hits"),
+            ("Boss Fight", "Answer questions correctly to defeat the boss"),
+            ("Game Over", "Game ends when lives reach zero or if you defeat the Boss")
+        ]
+
+        # Layout for instructions
+        y_pos = 80
+        for title, content in instructions:
+            title_text = self.font.render(title + ":", True, self.RED)
+            content_text = self.font.render(content, True, self.WHITE)
+            title_x = self.screen_width // 2 - (title_text.get_width() + content_text.get_width() + 5) // 2
+            self.screen.blit(title_text, (title_x, y_pos))
+            self.screen.blit(content_text, (title_x + title_text.get_width() + 5, y_pos))
+            y_pos += title_text.get_height() + 5
+
+        # Power-ups title
+        power_ups_title = self.font.render("Power-ups:", True, self.RED)
+        power_ups_title_x = self.screen_width // 2 - power_ups_title.get_width() // 2
+        self.screen.blit(power_ups_title, (power_ups_title_x, y_pos + 20))
+    
+        # Power-ups explanation
+        power_ups = [
+            ("Laser", self.RED, "Longer, faster, and more frequent shots"),
+            ("Shield", (self.LIGHTBLUE), "Temporary invulnerability"),
+            ("Triple Shot", self.GREEN, "Shoot three bullets at once")
         ]
     
-        y_position = 80
-        for instruction in instructions:
-            instruction_text = instructions_font.render(instruction, True, self.WHITE)
-            self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, y_position))
-            y_position += 30
+        # Calculate starting position for power-ups
+        power_up_y = y_pos + 50  # Space for title
+        for name, color, effect in power_ups:
+            name_text = self.font.render(f"- {name}", True, color)
+            effect_text = self.font.render(effect, True, self.WHITE)
+            name_x = self.screen_width // 2 - (name_text.get_width() + effect_text.get_width() + 5) // 2
+            self.screen.blit(name_text, (name_x, power_up_y))
+            self.screen.blit(effect_text, (name_x + name_text.get_width() + 5, power_up_y))
+            power_up_y += name_text.get_height() + 5
 
-        more_text = instructions_font.render("Press any key to go back!", True, self.YELLOW)
-        self.screen.blit(more_text, (self.screen_width // 2 - more_text.get_width() // 2, self.screen_height - 50))
+        # Navigation
+        back_text = self.font.render("Press any key to go back", True, self.YELLOW)
+        back_x = self.screen_width // 2 - back_text.get_width() // 2
+        self.screen.blit(back_text, (back_x, self.screen_height - 40))
 
         pygame.display.flip()
         self.wait_for_keypress()
 
     def reset_game(self):
-        # Reset game state
+        """
+        Resets the game to its initial state.
+        """
         self.player.lives = 3
         self.bullet_manager.player_bullets = []
         self.bullet_manager.enemy_bullets = []
@@ -513,12 +583,19 @@ class Game:
         self.last_hit_time = 0
         self.boss.health = self.boss.max_health
         self.enemy_manager.create_enemies()
-        self.hits = 0  # Reset hits
-        self.score = 5000  # Reset score
-        self.power_ups.power_up_active = False
-        self.power_ups.current_power_up = None  # Clear any active power-up
-        self.main_game_loop()
+        self.hits = 0
+        self.score = 5000
+        self.power_ups.reset_power_up()
 
+        # Clear any existing score adjustments
+        if hasattr(self, 'score_adjustment'):
+            del self.score_adjustment
+
+        # Reset timers for score adjustment and game state
+        pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Stop any ongoing timers
+
+        self.main_game_loop()
+               
     def end_game_screen(self):
         self.screen.fill(self.BLACK)
     
@@ -563,29 +640,25 @@ class Game:
 
             pygame.display.flip()
             
+        self.power_ups.reset_power_up()
+            
     def save_score(self, name, score):
-        scores = []
-        try:
-            with open('Leaderboard.txt', 'r') as file:
-                for line in file:
-                    entry = line.strip().split(':')
-                    if len(entry) == 2:
-                        scores.append((entry[0], int(entry[1])))
-        except FileNotFoundError:
-            pass  # File doesn't exist, start with empty list
-
-        scores.append((name, score))
-        scores.sort(key=lambda x: x[1], reverse=True)  # Sort by score from highest to lowest
-        if len(scores) > 10:
-            scores = scores[:10]  # Keep only top 10 scores
-
-        with open('Leaderboard.txt', 'w') as file:
-            for player, score in scores:
-                file.write(f"{player}:{score}\n")
-
-        self.show_menu()  # Return to main menu after saving score
+        if self.check_server_availability():
+            try:
+                payload = {'player_name': name, 'score': score}
+                response = requests.post("http://localhost:5000/submit_score", json=payload, timeout=5)
+                if response.status_code != 200:
+                    raise Exception(f"Failed to submit score. Status code: {response.status_code}")
+                else:
+                    self.display_feedback("Score submitted successfully", self.GREEN)
+                    self.show_menu()
+            except requests.RequestException as e:
+                self.display_feedback(f"Network Error: {str(e)}", self.RED)
+            except Exception as e:
+                self.display_feedback(f"Error: {str(e)}", self.RED)
+        else:
+            self.display_feedback("Server is not available", self.RED)
         
-
 class Player:
     def __init__(self, game):
         self.image = self.load_and_scale_image("player.png", (50, 50))
@@ -612,7 +685,7 @@ class Player:
     def create_shield_outline(self):
         outline_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         player_mask = pygame.mask.from_surface(self.image)
-        dark_blue = (44, 44, 169, 255)  # Darker blue for the outline
+        dark_blue = (60, 60 , 180, 255)  # Darker blue for the outline
 
         for x in range(self.width):
             for y in range(self.height):
@@ -655,7 +728,6 @@ class Player:
         self.game.screen.blit(self.image, (self.x, self.y))
         
         if self.invulnerable:
-            # Draw the flashing shield outline
             if int(time.time() * 5) % 2 == 0:  # Flash every 0.2 seconds
                 self.game.screen.blit(self.shield_outline, (self.x, self.y))
                 
@@ -806,9 +878,21 @@ class BulletManager:
         self.player_shoot_interval = 0.2  # Default shoot interval for player
         self.last_shot_time = 0
         self.game = game
+        self.angle = math.radians(20)
+        self.triple_shot = False
 
     def add_player_bullet(self, x, y):
-        self.player_bullets.append([x, y, self.player_bullet_height])
+        if self.triple_shot:
+            # Middle bullet (straight ahead)
+            self.player_bullets.append([x, y, self.player_bullet_height, 0])  # angle 0 means straight up
+            
+            # Left bullet (20 degrees to the left)
+            self.player_bullets.append([x - 10, y, self.player_bullet_height, -self.angle])  
+            
+            # Right bullet (20 degrees to the right)
+            self.player_bullets.append([x + 10, y, self.player_bullet_height, self.angle])
+        else:
+            self.player_bullets.append([x, y, self.player_bullet_height, 0])  # Single shot straight up
 
     def add_enemy_bullet(self, x, y):
         self.enemy_bullets.append([x, y])
@@ -818,13 +902,37 @@ class BulletManager:
 
     def update_player_bullets(self):
         for bullet in self.player_bullets[:]:
-            bullet[1] -= self.player_bullet_speed
-            pygame.draw.rect(self.game.screen, self.game.GREEN, (bullet[0], bullet[1], self.bullet_width, bullet[2]))
-            if bullet[1] < 0:
+            x, y, height, angle = bullet
+            
+            # Move bullet based on its angle
+            if angle == 0:  # Straight up
+                bullet[1] -= self.player_bullet_speed
+            else:
+                # Calculate movement based on angle
+                bullet[0] += self.player_bullet_speed * math.sin(angle)  # Horizontal movement
+                bullet[1] -= self.player_bullet_speed * math.cos(angle)  # Vertical movement
+
+            # Calculate points for drawing a rotated rectangle
+            # Here we're using the bullet's height as its length in the direction of travel
+            rect_points = [
+                (x, y),
+                (x + height * math.sin(angle), y - height * math.cos(angle)),
+                (x + self.bullet_width * math.cos(angle) + height * math.sin(angle), y + self.bullet_width * math.sin(angle) - height * math.cos(angle)),
+                (x + self.bullet_width * math.cos(angle), y + self.bullet_width * math.sin(angle))
+            ]
+
+            # Draw the rotated rectangle
+            pygame.draw.polygon(self.game.screen, self.game.GREEN, rect_points)
+
+            # Remove bullet if it's off-screen
+            if bullet[1] < 0 or bullet[0] < 0 or bullet[0] > self.game.screen_width:
                 self.player_bullets.remove(bullet)
             
+            # Check for collision with enemies
             for enemy in self.game.enemy_manager.enemies[:]:
-                if enemy[0] < bullet[0] < enemy[0] + 40 and enemy[1] < bullet[1] < enemy[1] + 40:
+                # Simplified collision detection; for accuracy, consider using a more complex method
+                if (enemy[0] < x < enemy[0] + 40 and enemy[1] < y < enemy[1] + 40) or \
+                   (enemy[0] < x + height * math.sin(angle) < enemy[0] + 40 and enemy[1] < y - height * math.cos(angle) < enemy[1] + 40):
                     self.player_bullets.remove(bullet)
                     self.game.enemy_manager.enemies.remove(enemy)
                     break
@@ -864,6 +972,9 @@ class BulletManager:
                     return True
         return False
 
+    def reset_triple_shot(self):
+        self.triple_shot = False
+
     def check_player_hit_by_boss_bullet(self):
         for bullet in self.boss_bullets[:]:
             if (self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and 
@@ -876,46 +987,69 @@ class BulletManager:
 
 class PowerUpManager:
     def __init__(self, game):
+        self.spawn_time = 0
+        self.spawn_interval = 15  # seconds between power-ups
         self.power_ups = []
         self.game = game
-        self.spawn_time = 0
-        self.spawn_interval = 15
         self.power_up_active = False
         self.power_up_timer = 0
-        self.current_power_up = None  # Track the current power-up type
+        self.current_power_up = None
+        self.last_level_check = 1
+        self.is_first_level = True  # New flag for first level
 
     def update(self):
         current_time = time.time()
-        if current_time - self.spawn_time > self.spawn_interval:
-            self.spawn_power_up()
-            self.spawn_time = current_time
+        
+        # Handling for the first level
+        if self.is_first_level:
+            if not self.power_ups:
+                self.spawn_power_up()
+                self.is_first_level = False
+        
+        # Check if a new level has started (excluding first level)
+        elif self.game.level != self.last_level_check:
+            self.power_ups.clear()  # Clear old power-ups
+            self.spawn_power_up()  # Spawn new power-up
+            self.spawn_time = current_time  # Reset the timer
+            self.last_level_check = self.game.level  # Update the last checked level
 
-        for power_up in self.power_ups[:]:
+        # Normal spawn conditions for non-boss levels when no power-up is active
+        if not self.game.boss_fight and not self.power_up_active:
+            if not self.power_ups and current_time - self.spawn_time >= self.spawn_interval:
+                self.spawn_power_up()
+                self.spawn_time = current_time
+
+        # Update existing power-up
+        if self.power_ups:
+            power_up = self.power_ups[0]
             power_up[1] += 2  # Move downwards
             if power_up[1] > self.game.screen_height:
-                self.power_ups.remove(power_up)
+                self.power_ups.clear()  # Remove power-up if it goes off screen
             else:
                 pygame.draw.circle(self.game.screen, self.game.BLUE, (int(power_up[0]), int(power_up[1])), 10)
 
-            if self.game.player.x < power_up[0] < self.game.player.x + self.game.player.width and \
-               self.game.player.y < power_up[1] < self.game.player.y + self.game.player.height:
-                self.power_ups.remove(power_up)
+            # Check for collision with player
+            if (self.game.player.x < power_up[0] < self.game.player.x + self.game.player.width and 
+                self.game.player.y < power_up[1] < self.game.player.y + self.game.player.height):
+                self.power_ups.clear()
                 self.apply_power_up()
 
+        # Deactivate power-up after duration
         if self.power_up_active:
-            if current_time - self.power_up_timer > 5:  # Power-up lasts for 5 seconds
+            if current_time - self.power_up_timer > 5:  # Duration of power-up
                 self.reset_power_up()
 
     def spawn_power_up(self):
-        x = random.randint(0, self.game.screen_width - 20)  # Adjust size to match power-up visual
-        y = 0
-        self.power_ups.append([x, y])
+        if not self.power_ups:  # Ensure only one power-up spawns at a time
+            x = random.randint(0, self.game.screen_width - 20)
+            y = 0
+            self.power_ups = [[x, y]]
 
     def apply_power_up(self):
         self.power_up_active = True
         self.power_up_timer = time.time()
         
-        power_up_types = ['Laser', 'Shield', 'Score Multiplier']
+        power_up_types = ['Laser', 'Shield', 'TripleShot']
         self.current_power_up = random.choice(power_up_types)
         
         if self.current_power_up == 'Laser':
@@ -923,23 +1057,28 @@ class PowerUpManager:
             self.game.bullet_manager.player_bullet_speed = 35
             self.game.bullet_manager.player_shoot_interval = 0.005
         elif self.current_power_up == 'Shield':
-            self.game.player.invulnerable = True
-        elif self.current_power_up == 'Score Multiplier':
-            self.game.score_multiplier = 2
-        
-        self.game.score += 100  # Bonus points for collecting power-up
+            self.game.player.set_invulnerable()  # Changed from directly setting invulnerable to using a method
+        elif self.current_power_up == 'TripleShot':
+            self.game.bullet_manager.triple_shot = True
+
+        self.game.adjust_score(250)  
         self.game.power_up_sound.play()
 
     def reset_power_up(self):
+        """
+        Resets all active power-up effects and prepares for the next spawn.
+        """
         self.power_up_active = False
-        self.game.bullet_manager.player_bullet_height = 10
-        self.game.bullet_manager.player_bullet_speed = 7
-        self.game.bullet_manager.player_shoot_interval = 0.2
-        if 'Shield' == self.current_power_up:
-            self.game.player.invulnerable = False
-        if 'Score Multiplier' == self.current_power_up:
-            self.game.score_multiplier = 1
         self.current_power_up = None
+        self.power_ups.clear()
+        self.spawn_time = time.time()  # Reset the spawn timer
+
+        # Reset specific power-up effects
+        self.game.bullet_manager.player_bullet_height = 10  # Default bullet height
+        self.game.bullet_manager.player_bullet_speed = 7    # Default bullet speed
+        self.game.bullet_manager.player_shoot_interval = 0.2  # Default shoot interval
+        self.game.bullet_manager.triple_shot = False  # Disable TripleShot
+        self.game.player.invulnerable = False  # Disable Shield
 
 
 def main():
@@ -949,3 +1088,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
