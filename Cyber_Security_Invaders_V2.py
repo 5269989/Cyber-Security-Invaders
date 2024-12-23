@@ -405,6 +405,16 @@ class Game:
                             return
                         elif menu_options[selected_option] == "Leaderboard":
                             self.show_leaderboard()
+                        elif menu_options[selected_option] == "Instructions":
+                            self.show_instructions()
+                        elif menu_options[selected_option] == "Save Game":
+                            self.save_game()
+                        elif menu_options[selected_option] == "Load Game":
+                            if self.load_game():
+                                return  # Return if game loaded successfully
+                        elif menu_options[selected_option] == "Exit":
+                            pygame.quit()
+                            quit()
                             
     def save_game(self):
         game_state = {
@@ -452,37 +462,41 @@ class Game:
         except requests.RequestException:
             return False
         
-    def show_leaderboard(self):
+    def create_loading_screen(self):
         self.screen.fill(self.BLACK)
-        leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
-        self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
-    
-        smaller_font = pygame.font.SysFont("Arial", 22)
-        y_position = 100
-
-        if self.check_server_availability():
-            try:
-                response = requests.get("http://localhost:5000/leaderboard", timeout=5)
-                if response.status_code == 200:
-                    leaderboard_data = response.json()
-                    for i, entry in enumerate(leaderboard_data):
-                        player_text = smaller_font.render(f"{i+1}. {entry['player']} - {entry['score']} points", True, self.WHITE)
-                        self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
-                        y_position += 40
-                else:
-                    raise Exception("Failed to retrieve leaderboard")
-            except Exception as e:
-                error_text = smaller_font.render(f"Error: {str(e)}", True, self.RED)
-                self.screen.blit(error_text, (self.screen_width // 2 - error_text.get_width() // 2, y_position))
-        else:
-            error_text = smaller_font.render("Server is not available", True, self.RED)
-            self.screen.blit(error_text, (self.screen_width // 2 - error_text.get_width() // 2, y_position))
-
+        loading_text = self.big_font.render("Loading...", True, self.GREEN)
+        self.screen.blit(loading_text, (self.screen_width // 2 - loading_text.get_width() // 2, self.screen_height // 2 - loading_text.get_height() // 2))
+        pygame.display.flip()
+        
+    def show_leaderboard(self):
+        self.create_loading_screen()  # Show loading screen
+        try:
+            response = requests.get("http://localhost:5000/leaderboard", timeout=5)
+            if response.status_code == 200:
+                leaderboard_data = response.json()
+                self.screen.fill(self.BLACK)
+                leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
+                self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
+                
+                smaller_font = pygame.font.SysFont("Arial", 22)
+                y_position = 100
+                
+                for i, entry in enumerate(leaderboard_data):
+                    player_text = smaller_font.render(f"{i+1}. {entry['player']} - {entry['score']} points", True, self.WHITE)
+                    self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
+                    y_position += 40
+            else:
+                raise Exception("Failed to retrieve leaderboard")
+        except Exception as e:
+            self.screen.fill(self.BLACK)
+            error_text = self.big_font.render(f"Error: {str(e)}", True, self.RED)
+            self.screen.blit(error_text, (self.screen_width // 2 - error_text.get_width() // 2, self.screen_height // 2 - error_text.get_height() // 2))
+        
         tip = "Press any key to go back!"
         tip_text = self.font.render(tip, True, self.GREEN)
         self.screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, self.screen_height - 50))
 
-        pygame.display.flip()  # Update the display
+        pygame.display.flip()
 
         # Wait for a key press before returning to the menu
         waiting = True
@@ -493,7 +507,7 @@ class Game:
                     quit()
                 if event.type == pygame.KEYDOWN:
                     waiting = False
-        self.show_menu()  # Return to the menu after viewing the leaderboard
+        self.show_menu()
 
     def level_complete_screen(self):
         self.screen.fill(self.BLACK)
@@ -643,21 +657,20 @@ class Game:
         self.power_ups.reset_power_up()
             
     def save_score(self, name, score):
-        if self.check_server_availability():
-            try:
-                payload = {'player_name': name, 'score': score}
-                response = requests.post("http://localhost:5000/submit_score", json=payload, timeout=5)
-                if response.status_code != 200:
-                    raise Exception(f"Failed to submit score. Status code: {response.status_code}")
-                else:
-                    self.display_feedback("Score submitted successfully", self.GREEN)
-                    self.show_menu()
-            except requests.RequestException as e:
-                self.display_feedback(f"Network Error: {str(e)}", self.RED)
-            except Exception as e:
-                self.display_feedback(f"Error: {str(e)}", self.RED)
-        else:
-            self.display_feedback("Server is not available", self.RED)
+        self.create_loading_screen()  # Show loading screen
+        try:
+            payload = {'player_name': name, 'score': score}
+            response = requests.post("http://localhost:5000/submit_score", json=payload, timeout=5)
+            if response.status_code != 200:
+                raise Exception(f"Failed to submit score. Status code: {response.status_code}")
+            else:
+                self.display_feedback("Score submitted successfully", self.GREEN)
+        except requests.RequestException as e:
+            self.display_feedback(f"Network Error: {str(e)}", self.RED)
+        except Exception as e:
+            self.display_feedback(f"Error: {str(e)}", self.RED)
+        
+        self.show_menu()
         
 class Player:
     def __init__(self, game):
