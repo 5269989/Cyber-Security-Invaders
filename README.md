@@ -45,7 +45,7 @@
 1. **Start the Flask Server** (for leaderboard functionality):
 - Navigate to the Flask server directory:
   ```
-  cd thisiot_FlaskServer
+  cd FlaskServer
   ```
 - Run the server:
   ```
@@ -62,7 +62,7 @@
   ```
 - Start the game:
   ```
-  python main.py
+  Cyber_Security_Invaders_V2.py
   ```
 
 ### Running on Raspberry Pi
