@@ -11,6 +11,7 @@ import requests
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
 
 if is_raspberry_pi:
+    import RPi.GPIO as GPIO
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
     GREEN_LED_PIN = 20
