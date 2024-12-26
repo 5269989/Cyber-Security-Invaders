@@ -1,60 +1,69 @@
 import RPi.GPIO as GPIO
 import time
 
+# GPIO setup
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+
+# Define GPIO pins for segments
 SEGMENTS = {
     'a': 4, 'b': 18, 'c': 24, 'd': 23, 'e': 22, 'f': 17, 'g': 27
 }
+
+# Define GPIO pins for digits
 DIGITS = {
     1: 16, 2: 25, 3: 26, 4: 5
 }
 
-def setup():
-    GPIO.setwarnings(False)
-    GPIO.setmode(GPIO.BCM)
+# Setup GPIO pins as outputs
+for segment in SEGMENTS.values():
+    GPIO.setup(segment, GPIO.OUT)
+for digit in DIGITS.values():
+    GPIO.setup(digit, GPIO.OUT)
+
+# Define segment patterns for each digit
+DIGIT_PATTERNS = {
+    0: ('a', 'b', 'c', 'd', 'e', 'f'),
+    1: ('b', 'c'),
+    2: ('a', 'b', 'g', 'e', 'd'),
+    3: ('a', 'b', 'g', 'c', 'd'),
+    4: ('f', 'g', 'b', 'c'),
+    5: ('a', 'f', 'g', 'c', 'd'),
+    6: ('a', 'f', 'g', 'e', 'd', 'c'),
+    7: ('a', 'b', 'c'),
+    8: ('a', 'b', 'c', 'd', 'e', 'f', 'g'),
+    9: ('a', 'b', 'c', 'f', 'g')
+}
+
+def display_digit(digit, number):
+    # Turn on all segments for the digit
+    for segment in DIGIT_PATTERNS.get(number, []):
+        GPIO.output(SEGMENTS[segment], GPIO.HIGH)
     
+    # Activate the specific digit
+    GPIO.output(DIGITS[digit], GPIO.LOW)
+    time.sleep(0.001)  # Brief display time
+    GPIO.output(DIGITS[digit], GPIO.HIGH)
+
+    # Turn off all segments
     for segment in SEGMENTS.values():
-        GPIO.setup(segment, GPIO.OUT)
-        GPIO.output(segment, GPIO.HIGH)  # Turn off all segments (common anode)
+        GPIO.output(segment, GPIO.LOW)
 
-    for digit in DIGITS.values():
-        GPIO.setup(digit, GPIO.OUT)
-        GPIO.output(digit, GPIO.HIGH)  # Turn off all digits initially
+def display_number(number):
+    for i in range(4):
+        digit = 4 - i  # Start from the leftmost digit
+        display_digit(digit, int(number) % 10)
+        number = number // 10
 
-def get_segments_for_digit(digit):
-    segment_map = {
-        0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 
-        5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg'
-    }
-    return segment_map.get(digit, '')
+try:
+    count = 9999
+    while count >= 0:
+        display_number(str(count).zfill(4))
+        count -= 1
+        time.sleep(0.5)  # Time between each count update
 
-def display_number_on_7seg(number):
-    if number < 0 or number > 9999:
-        return  # Out of range for a 4-digit display
-    
-    digits = [int(d) for d in str(number).zfill(4)]
-    
-    for _ in range(200):  # Increase this for clearer visibility during testing
-        for i, digit_value in enumerate(digits):
-            digit_pin = DIGITS[i + 1]
-            GPIO.output(digit_pin, GPIO.LOW)
-            
-            segments_on = get_segments_for_digit(digit_value)
-            for segment, pin in SEGMENTS.items():
-                GPIO.output(pin, GPIO.LOW if segment in segments_on else GPIO.HIGH)
-            
-            time.sleep(0.002)  # Slight increase for testing visibility
-            GPIO.output(digit_pin, GPIO.HIGH)
+except KeyboardInterrupt:
+    print("Countdown stopped by user.")
 
-def main():
-    setup()
-    try:
-        for number in range(10000):  # From 0000 to 9999
-            display_number_on_7seg(number)
-            time.sleep(0.5)  # Hold each number for half a second for visibility
-    except KeyboardInterrupt:
-        pass
-    finally:
-        GPIO.cleanup()
-
-if __name__ == '__main__':
-    main()
+finally:
+    GPIO.cleanup()  # Clean up GPIO on exit
