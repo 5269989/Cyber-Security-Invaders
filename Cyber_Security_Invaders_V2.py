@@ -13,8 +13,8 @@ is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().l
 if is_raspberry_pi:
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
-    GREEN_LED_PIN = 20  # Updated pin for green LED
-    RED_LED_PIN = 21    # Updated pin for red LED
+    GREEN_LED_PIN = 20
+    RED_LED_PIN = 21
     GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
     GPIO.setup(RED_LED_PIN, GPIO.OUT)
 
@@ -28,11 +28,11 @@ if is_raspberry_pi:
 
     for segment in SEGMENTS.values():
         GPIO.setup(segment, GPIO.OUT)
-        GPIO.output(segment, GPIO.LOW)
+        GPIO.output(segment, GPIO.HIGH)  # Turn off all segments (common anode)
 
     for digit in DIGITS.values():
         GPIO.setup(digit, GPIO.OUT)
-        GPIO.output(digit, GPIO.HIGH)  # Turn off digit initially
+        GPIO.output(digit, GPIO.HIGH)  # Turn off all digits initially
 
     def display_number_on_7seg(number):
         if number < 0 or number > 9999:
@@ -47,17 +47,17 @@ if is_raspberry_pi:
             # Displaying each segment for the digit
             segments_on = get_segments_for_digit(digit_value)
             for segment, pin in SEGMENTS.items():
-                GPIO.output(pin, GPIO.HIGH if segment in segments_on else GPIO.LOW)
+                GPIO.output(pin, GPIO.LOW if segment in segments_on else GPIO.HIGH)  # LOW for on with common anode
             
-            # Brief delay for visibility, but not using time.sleep to avoid game pause
-            # Instead, we'll handle this in the main loop's frame update
+            # Brief delay for visibility
+            time.sleep(0.001)  # Very short delay for human eye persistence
             
             GPIO.output(digit_pin, GPIO.HIGH)  # Turn off digit
 
     def get_segments_for_digit(digit):
         segment_map = {
-            0: 'abcefg', 1: 'cf', 2: 'acdeg', 3: 'acdfg', 4: 'bcdf', 
-            5: 'abdfg', 6: 'abdefg', 7: 'acf', 8: 'abcdefg', 9: 'abcdfg'
+            0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 
+            5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg'
         }
         return segment_map.get(digit, '')
 
