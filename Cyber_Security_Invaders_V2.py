@@ -15,12 +15,45 @@ if is_raspberry_pi:
     import RPi.GPIO as GPIO
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
-    GREEN_LED_PIN = 4
-    RED_LED_PIN = 17
+    GREEN_LED_PIN = 20  # Changed from 4 to 20
+    RED_LED_PIN = 21    # Changed from 17 to 21
     GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
     GPIO.setup(RED_LED_PIN, GPIO.OUT)
 else:
     print("Not running on a Raspberry Pi. GPIO functionality disabled.")
+
+# 7 Segment Display setup
+SEGMENTS = {
+    'a': 4, 'b': 18, 'c': 24, 'd': 23, 'e': 22, 'f': 17, 'g': 27
+}
+DIGITS = {
+    1: 16,  # Digit 1: GPIO 16
+    2: 25,  # Digit 2: GPIO 25
+    3: 26,  # Digit 3: GPIO 26
+    4: 5    # Digit 4: GPIO 05
+}
+
+for digit in DIGITS.values():
+    GPIO.setup(digit, GPIO.OUT)
+for segment in SEGMENTS.values():
+    GPIO.setup(segment, GPIO.OUT)
+
+# Function to display a number on a 7-segment display
+def display_number(number):
+    digits = [int(x) for x in str(number).zfill(4)[-4:]]
+    digit_patterns = {
+        '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abcdg', '4': 'bcfg', 
+        '5': 'acdfg', '6': 'acdefg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg'
+    }
+    
+    for index, (digit_value, gpio_pin) in enumerate(DIGITS.items(), start=1):
+        GPIO.output(gpio_pin, GPIO.LOW)  # Turn off all digits
+        if index <= len(digits):
+            pattern = digit_patterns.get(str(digits[index - 1]), '')
+            for segment, segment_pin in SEGMENTS.items():
+                GPIO.output(segment_pin, GPIO.LOW if segment in pattern else GPIO.HIGH)
+            GPIO.output(gpio_pin, GPIO.HIGH)  # Light up the current digit
+            time.sleep(0.001)  # brief display for multiplexing
 
 pygame.init()
 pygame.mixer.init()  # Initialize the mixer for sound
@@ -197,6 +230,8 @@ class Game:
             adjust_text = self.font.render(self.score_adjustment, True, self.RED if self.score_adjustment[0] == '-' else self.GREEN)
             self.screen.blit(adjust_text, (score_text.get_width() + 20, 40))
 
+        if is_raspberry_pi:
+            display_number(self.score)
 
     def adjust_score(self, points):
         self.score = max(0, self.score + points)  # Ensure score is non-negative
