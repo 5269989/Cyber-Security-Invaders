@@ -1,27 +1,20 @@
 import RPi.GPIO as GPIO
 import time
 
-# GPIO setup
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
+Define GPIO pins for digits
+DIGITS = {
+    1: 16,  # Digit 1 connected to GPIO 16
+    2: 25,  # Digit 2 connected to GPIO 25
+    3: 26,  # Digit 3 connected to GPIO 26
+    4: 5    # Digit 4 connected to GPIO 5
+}
 
-# Define GPIO pins for segments
+Define GPIO pins for segments
 SEGMENTS = {
     'a': 4, 'b': 18, 'c': 24, 'd': 23, 'e': 22, 'f': 17, 'g': 27
 }
 
-# Define GPIO pins for digits
-DIGITS = {
-    1: 16, 2: 25, 3: 26, 4: 5
-}
-
-# Setup GPIO pins as outputs
-for segment in SEGMENTS.values():
-    GPIO.setup(segment, GPIO.OUT)
-for digit in DIGITS.values():
-    GPIO.setup(digit, GPIO.OUT)
-
-# Define segment patterns for each digit
+Define segment patterns for numbers 0-9
 DIGIT_PATTERNS = {
     0: ('a', 'b', 'c', 'd', 'e', 'f'),
     1: ('b', 'c'),
@@ -35,35 +28,45 @@ DIGIT_PATTERNS = {
     9: ('a', 'b', 'c', 'f', 'g')
 }
 
+Setup GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+
+Setup segment pins as output
+for segment in SEGMENTS.values():
+    GPIO.setup(segment, GPIO.OUT)
+
+Setup digit pins as output
+for digit_pin in DIGITS.values():
+    GPIO.setup(digit_pin, GPIO.OUT)
+
 def display_digit(digit, number):
-    # Turn on all segments for the digit
-    for segment in DIGIT_PATTERNS.get(number, []):
-        GPIO.output(SEGMENTS[segment], GPIO.HIGH)
-    
-    # Activate the specific digit
-    GPIO.output(DIGITS[digit], GPIO.LOW)
-    time.sleep(0.001)  # Brief display time
-    GPIO.output(DIGITS[digit], GPIO.HIGH)
+    # Turn off all digits
+    for digit_pin in DIGITS.values():
+        GPIO.output(digit_pin, GPIO.LOW)
 
-    # Turn off all segments
-    for segment in SEGMENTS.values():
-        GPIO.output(segment, GPIO.LOW)
+# Turn on the selected digit
+GPIO.output(DIGITS[digit], GPIO.HIGH)
 
+# Display the number on the segments
+for segment, pin in SEGMENTS.items():
+    if segment in DIGIT_PATTERNS[number]:
+        GPIO.output(pin, GPIO.LOW)  # Active low for LEDs
+    else:
+        GPIO.output(pin, GPIO.HIGH)
 def display_number(number):
-    for i in range(4):
-        digit = 4 - i  # Start from the leftmost digit
-        display_digit(digit, int(number) % 10)
-        number = number // 10
+    # Convert number to string and pad with zeros if needed
+    num_str = f"{number:04d}"
 
+for i, digit in enumerate(num_str):
+    display_digit(i+1, int(digit))
+    time.sleep(0.001)  # Short delay for persistence of vision
+Example usage
 try:
-    count = 9999
-    while count >= 0:
-        display_number(str(count).zfill(4))
-        count -= 1
-        time.sleep(0.5)  # Time between each count update
-
+    while True:
+        display_number(1234)  # Display '1234' on the display
 except KeyboardInterrupt:
-    print("Countdown stopped by user.")
+    pass
 
-finally:
-    GPIO.cleanup()  # Clean up GPIO on exit
+Clean up GPIO on exit
+GPIO.cleanup()
