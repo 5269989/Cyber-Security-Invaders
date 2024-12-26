@@ -7,6 +7,16 @@ import json
 import math
 import requests
 
+def display_number_test(number):
+    digit_patterns = {'0': 'abcdef', '5': 'acdfg'}
+    digit_gpio = DIGITS[1]  # Testing only digit 1
+    pattern = digit_patterns.get(str(number), '')
+    for segment, segment_pin in SEGMENTS.items():
+        GPIO.output(segment_pin, GPIO.LOW if segment in pattern else GPIO.HIGH)
+    GPIO.output(digit_gpio, GPIO.LOW)
+    time.sleep(0.1)  # Keep it on long enough to see
+    GPIO.output(digit_gpio, GPIO.HIGH)
+
 
 # Check if running on a Raspberry Pi
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
@@ -32,7 +42,6 @@ DIGITS = {
     3: 26,  # Digit 3: GPIO 26
     4: 5    # Digit 4: GPIO 05
 }
-
 for digit in DIGITS.values():
     GPIO.setup(digit, GPIO.OUT)
 for segment in SEGMENTS.values():
@@ -47,13 +56,22 @@ def display_number(number):
     }
     
     for index, (digit_value, gpio_pin) in enumerate(DIGITS.items(), start=1):
-        GPIO.output(gpio_pin, GPIO.LOW)  # Turn off all digits
+        # Turn off all digits
+        for d in DIGITS.values():
+            GPIO.output(d, GPIO.HIGH)  # HIGH to turn off for common cathode
+        
         if index <= len(digits):
             pattern = digit_patterns.get(str(digits[index - 1]), '')
             for segment, segment_pin in SEGMENTS.items():
+                # Light up segments for this digit
                 GPIO.output(segment_pin, GPIO.LOW if segment in pattern else GPIO.HIGH)
-            GPIO.output(gpio_pin, GPIO.HIGH)  # Light up the current digit
-            time.sleep(0.001)  # brief display for multiplexing
+            
+            # Light up this digit
+            GPIO.output(gpio_pin, GPIO.LOW)
+            time.sleep(0.001)  # Very brief display for multiplexing
+            
+            # Turn off this digit before going to the next one
+            GPIO.output(gpio_pin, GPIO.HIGH)
 
 pygame.init()
 pygame.mixer.init()  # Initialize the mixer for sound
