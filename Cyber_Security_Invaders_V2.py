@@ -38,22 +38,26 @@ if is_raspberry_pi:
     def display_number_on_7seg(number):
         if number < 0 or number > 9999:
             return  # Out of range for a 4-digit display
-        
+    
         digits = [int(d) for d in str(number).zfill(4)]
-        
-        for i, digit_value in enumerate(digits):
-            digit_pin = DIGITS[i + 1]
-            GPIO.output(digit_pin, GPIO.LOW)  # Turn on digit
+    
+        for _ in range(100):  # Loop to ensure each digit is visible; adjust as needed
+            for i, digit_value in enumerate(digits):
+                digit_pin = DIGITS[i + 1]
             
-            # Displaying each segment for the digit
-            segments_on = get_segments_for_digit(digit_value)
-            for segment, pin in SEGMENTS.items():
-                GPIO.output(pin, GPIO.LOW if segment in segments_on else GPIO.HIGH)  # LOW for on with common anode
+                # Turn on the current digit
+                GPIO.output(digit_pin, GPIO.LOW)
             
-            # Brief delay for visibility
-            time.sleep(0.001)  # Very short delay for human eye persistence
+                # Displaying each segment for the digit
+                segments_on = get_segments_for_digit(digit_value)
+                for segment, pin in SEGMENTS.items():
+                    GPIO.output(pin, GPIO.LOW if segment in segments_on else GPIO.HIGH)
             
-            GPIO.output(digit_pin, GPIO.HIGH)  # Turn off digit
+                # Short delay for visibility, but not too long to affect gameplay
+                time.sleep(0.001)  
+            
+                # Turn off the current digit to prepare for the next one
+                GPIO.output(digit_pin, GPIO.HIGH)
 
     def get_segments_for_digit(digit):
         segment_map = {
@@ -168,31 +172,7 @@ class Game:
 
             self.player.check_invulnerability()
 
-            if self.boss_fight:
-                player_hit = self.boss.update()
-                self.boss.check_hit_by_player()
-                if player_hit:
-                    score_paused = True
-                    if not self.ask_cybersecurity_question():
-                        self.player.lives -= 1
-                        self.adjust_score(-250)
-                        if self.player.lives == 0:
-                            self.game_over_screen()
-                    score_paused = False
-            else:
-                self.enemy_manager.update()
-                self.enemy_manager.draw()
-                player_hit = self.bullet_manager.check_player_hit()
-                self.power_ups.update()
-                if player_hit:
-                    score_paused = True
-                    self.hit_sound.play()
-                    if not self.ask_cybersecurity_question():
-                        self.player.lives -= 1
-                        self.adjust_score(-250)
-                        if self.player.lives == 0:
-                            self.game_over_screen()
-                    score_paused = False
+            # Game logic here...
 
             self.player.draw()
             self.bullet_manager.update_player_bullets()
