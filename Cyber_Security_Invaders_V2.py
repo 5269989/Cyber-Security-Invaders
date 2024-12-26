@@ -457,7 +457,7 @@ class Game:
         
     def check_server_availability(self):
         try:
-            response = requests.get("http://KASHIOUSHAY.pythonanywhere.com/leaderboard", timeout=5)
+            response = requests.get("http://5269989.pythonanywhere.com/leaderboard", timeout=5)
             return response.status_code == 200
         except requests.RequestException:
             return False
@@ -471,7 +471,7 @@ class Game:
     def show_leaderboard(self):
         self.create_loading_screen()  # Show loading screen
         try:
-            response = requests.get("http://KASHIOUSHAY.pythonanywhere.com/leaderboard", timeout=5)
+            response = requests.get("http://5269989.pythonanywhere.com/leaderboard", timeout=5)
             if response.status_code == 200:
                 leaderboard_data = response.json()
                 self.screen.fill(self.BLACK)
@@ -660,7 +660,7 @@ class Game:
         self.create_loading_screen()  # Show loading screen
         try:
             payload = {'player_name': name, 'score': score}
-            response = requests.post("http://KASHIOUSHAY.pythonanywhere.com/submit_score", json=payload, timeout=5)
+            response = requests.post("http://5269989.pythonanywhere.com/submit_score", json=payload, timeout=5)
             if response.status_code != 200:
                 raise Exception(f"Failed to submit score. Status code: {response.status_code}")
             else:
