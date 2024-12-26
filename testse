@@ -1,70 +1,74 @@
 import RPi.GPIO as GPIO
 import time
 
-# Define the GPIO pins connected to each segment and digit
+# Define GPIO pins for digits
+DIGITS = {
+    1: 16,  # Digit 1 connected to GPIO 16
+    2: 25,  # Digit 2 connected to GPIO 25
+    3: 26,  # Digit 3 connected to GPIO 26
+    4: 5    # Digit 4 connected to GPIO 5
+}
+
+# Define GPIO pins for segments
 SEGMENTS = {
     'a': 4, 'b': 18, 'c': 24, 'd': 23, 'e': 22, 'f': 17, 'g': 27
 }
-DIGITS = {
-    1: 5,  # Assuming digit 1 is always on if using a single power rail
-    2: 25, 3: 26, 4: 16
-}
 
-# Segment pattern for digits (0-9) where 1 = LED on, 0 = LED off for common anode
-DIGIT_MAP = {
-    0: (1, 1, 1, 1, 1, 1, 0),  # '0'
-    1: (0, 1, 1, 0, 0, 0, 0),  # '1'
-    2: (1, 1, 0, 1, 1, 0, 1),  # '2'
-    3: (1, 1, 1, 1, 0, 0, 1),  # '3'
-    4: (0, 1, 1, 0, 0, 1, 1),  # '4'
-    5: (1, 0, 1, 1, 0, 1, 1),  # '5'
-    6: (1, 0, 1, 1, 1, 1, 1),  # '6'
-    7: (1, 1, 1, 0, 0, 0, 0),  # '7'
-    8: (1, 1, 1, 1, 1, 1, 1),  # '8'
-    9: (1, 1, 1, 1, 0, 1, 1)   # '9'
+# Define segment patterns for numbers 0-9
+DIGIT_PATTERNS = {
+    0: ('a', 'b', 'c', 'd', 'e', 'f'),
+    1: ('b', 'c'),
+    2: ('a', 'b', 'g', 'e', 'd'),
+    3: ('a', 'b', 'g', 'c', 'd'),
+    4: ('f', 'g', 'b', 'c'),
+    5: ('a', 'f', 'g', 'c', 'd'),
+    6: ('a', 'f', 'g', 'e', 'd', 'c'),
+    7: ('a', 'b', 'c'),
+    8: ('a', 'b', 'c', 'd', 'e', 'f', 'g'),
+    9: ('a', 'b', 'c', 'f', 'g')
 }
 
 # Setup GPIO
-def setup():
-    GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
-    for segment in SEGMENTS.values():
-        GPIO.setup(segment, GPIO.OUT)
-        GPIO.output(segment, GPIO.HIGH)  # Turn off all segments at start (HIGH for common anode)
-    for digit in DIGITS.values():
-        GPIO.setup(digit, GPIO.OUT)
-        GPIO.output(digit, GPIO.HIGH)  # Turn off all digits at start (HIGH for common anode)
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
 
-# Display a digit on a specific digit position
-def display_digit_on_digit(digit_value, digit_position):
-    if digit_value < 0 or digit_value > 9:
-        return  # Only display 0-9
+# Setup segment pins as output
+for segment in SEGMENTS.values():
+    GPIO.setup(segment, GPIO.OUT)
+
+# Setup digit pins as output
+for digit_pin in DIGITS.values():
+    GPIO.setup(digit_pin, GPIO.OUT)
+
+def display_digit(digit, number):
+    # Turn off all digits
+    for digit_pin in DIGITS.values():
+        GPIO.output(digit_pin, GPIO.LOW)
     
-    segments = DIGIT_MAP[digit_value]
-    for i, segment in enumerate(SEGMENTS.values()):
-        GPIO.output(segment, GPIO.LOW if segments[i] else GPIO.HIGH)
+    # Turn on the selected digit
+    GPIO.output(DIGITS[digit], GPIO.HIGH)
     
-    # Turn on the specific digit while others are off
-    for d, pin in DIGITS.items():
-        GPIO.output(pin, GPIO.LOW if d == digit_position else GPIO.HIGH)
+    # Display the number on the segments
+    for segment, pin in SEGMENTS.items():
+        if segment in DIGIT_PATTERNS[number]:
+            GPIO.output(pin, GPIO.LOW)  # Active low for LEDs
+        else:
+            GPIO.output(pin, GPIO.HIGH)
 
-# Main function
-def main():
-    try:
-        setup()
-        
-        while True:
-            number = 1234  # Example number to display
-            digits = [int(d) for d in f"{number:04d}"]  # Convert number to list of digits
-            
-            for _ in range(1000):  # Show for a while, adjust as needed
-                for i, digit in enumerate(digits, 1):
-                    display_digit_on_digit(digit, i)
-                    time.sleep(0.001)  # Very short delay for multiplexing, adjust for flicker
+def display_number(number):
+    # Convert number to string and pad with zeros if needed
+    num_str = f"{number:04d}"
+    
+    for i, digit in enumerate(num_str):
+        display_digit(i+1, int(digit))
+        time.sleep(0.001)  # Short delay for persistence of vision
 
-    except KeyboardInterrupt:
-        print("\nProgram interrupted by user")
-    finally:
-        GPIO.cleanup()  # Clean up GPIO on exit
+# Example usage
+try:
+    while True:
+        display_number(1234)  # Display '1234' on the display
+except KeyboardInterrupt:
+    pass
 
-if __name__ == "__main__":
-    main()
+# Clean up GPIO on exit
+GPIO.cleanup()
