@@ -1,0 +1,62 @@
+import RPi.GPIO as GPIO
+import time
+
+# Define the GPIO pins connected to each segment
+SEGMENTS = {
+    'a': 4, 'b': 18, 'c': 24, 'd': 23, 'e': 22, 'f': 17, 'g': 27
+}
+
+# Segment pattern for digits (0-9) where 1 = LED on, 0 = LED off for common anode
+DIGIT_MAP = {
+    0: (1, 1, 1, 1, 1, 1, 0),  # '0'
+    1: (0, 1, 1, 0, 0, 0, 0),  # '1'
+    2: (1, 1, 0, 1, 1, 0, 1),  # '2'
+    3: (1, 1, 1, 1, 0, 0, 1),  # '3'
+    4: (0, 1, 1, 0, 0, 1, 1),  # '4'
+    5: (1, 0, 1, 1, 0, 1, 1),  # '5'
+    6: (1, 0, 1, 1, 1, 1, 1),  # '6'
+    7: (1, 1, 1, 0, 0, 0, 0),  # '7'
+    8: (1, 1, 1, 1, 1, 1, 1),  # '8'
+    9: (1, 1, 1, 1, 0, 1, 1)   # '9'
+}
+
+# Setup GPIO
+def setup():
+    GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
+    for segment in SEGMENTS.values():
+        GPIO.setup(segment, GPIO.OUT)  # Set each GPIO pin as an output
+        GPIO.output(segment, GPIO.HIGH)  # Turn off all segments at start (HIGH for common anode)
+
+# Display a digit
+def display_digit(digit):
+    if digit < 0 or digit > 9:
+        return  # Only display 0-9
+    
+    segments = DIGIT_MAP[digit]
+    for i, segment in enumerate(SEGMENTS.values()):
+        if segments[i]:
+            GPIO.output(segment, GPIO.LOW)  # Turn segment on by connecting to ground
+        else:
+            GPIO.output(segment, GPIO.HIGH)  # Turn segment off
+
+# Main function
+def main():
+    try:
+        setup()
+        
+        while True:
+            for i in range(10):  # Display numbers 0 through 9
+                display_digit(i)
+                print(f"Displaying digit: {i}")
+                time.sleep(1)  # Show each number for 1 second
+            
+            # Add a longer pause after cycling through all digits
+            time.sleep(2)
+
+    except KeyboardInterrupt:
+        print("\nProgram interrupted by user")
+    finally:
+        GPIO.cleanup()  # Clean up GPIO on exit
+
+if __name__ == "__main__":
+    main()
