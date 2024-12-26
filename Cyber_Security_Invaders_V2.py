@@ -41,7 +41,7 @@ if is_raspberry_pi:
     
         digits = [int(d) for d in str(number).zfill(4)]
     
-        for _ in range(100):  # Loop to ensure each digit is visible; adjust as needed
+        for _ in range(100):  # Adjust this number for visibility vs performance
             for i, digit_value in enumerate(digits):
                 digit_pin = DIGITS[i + 1]
             
