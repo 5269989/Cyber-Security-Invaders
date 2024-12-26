@@ -623,8 +623,8 @@ class Game:
 
         # Input Box
         input_box = pygame.Rect(self.screen_width // 2 + 0, self.screen_height // 2 + 30, 50, 32)
-        color_inactive = pygame.Color('lightskyblue3')
-        color_active = pygame.Color(self.GREEN)
+        color_inactive = self.LIGHTBLUE
+        color_active = self.GREEN
         color = color_active  # Active by default
         text = ''
 
