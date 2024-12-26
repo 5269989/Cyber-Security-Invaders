@@ -27,7 +27,7 @@ pygame.mixer.init()  # Initialize the mixer for sound
 
 class Game:
     def __init__(self):
-        self.screen_width = 1000
+        self.screen_width = 1200
         self.screen_height = 600
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         self.clock = pygame.time.Clock()
