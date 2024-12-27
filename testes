@@ -101,7 +101,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.game_over = False
         self.level = 1
-        self.total_levels = 5
+        self.total_levels = 2
         self.boss_fight = False
         self.question_limit = 3
         self.questions_asked = 0
@@ -189,7 +189,13 @@ class Game:
             
             with self.lock:
                 display_number_on_7seg(self.display_score) 
-
+                
+    def show_score(self):
+        if is_raspberry_pi:
+            with self.lock:
+                self.display_score = self.score  # Always update score for display
+            self.display_update_event.set()  # Trigger the display update
+        
     def display_changed_segments(self, number):
         # Only update what has changed
         new_digits = str(number).zfill(4)
@@ -245,10 +251,8 @@ class Game:
             self.player.check_invulnerability()
 
             # Update 7-segment display during questions or between levels
-            if is_raspberry_pi:
-                with self.lock:
-                    self.display_score = self.score  # Always update score for display
-                self.display_update_event.set()  # Trigger the display update
+            
+            self.show_score()
 
             if self.boss_fight:
                 player_hit = self.boss.update()
@@ -363,7 +367,7 @@ class Game:
 
         # Prepare to display the question
         selected_index = 0
-       running = True
+        running = True
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -391,10 +395,7 @@ class Game:
             # Render the question and options
             self.screen.fill(self.BLACK)
             
-            if is_raspberry_pi:
-                with self.lock:
-                    self.display_score = self.score
-                self.display_update_event.set()
+            self.show_score()
 
             # Render the question
             question_lines = self.wrap_text(question, self.big_font, self.screen_width - 40)
@@ -442,15 +443,15 @@ class Game:
         pygame.display.flip()
 
         if is_raspberry_pi:
+            
             if color == self.GREEN:
                 GPIO.output(GREEN_LED_PIN, GPIO.HIGH)
                 GPIO.output(RED_LED_PIN, GPIO.LOW)
             else:
                 GPIO.output(RED_LED_PIN, GPIO.HIGH)
                 GPIO.output(GREEN_LED_PIN, GPIO.LOW)
-
         pygame.time.wait(2000)
-
+        self.show_score()
         if is_raspberry_pi:
             GPIO.output(GREEN_LED_PIN, GPIO.LOW)
             GPIO.output(RED_LED_PIN, GPIO.LOW)
@@ -459,6 +460,8 @@ class Game:
         # Clear player bullets and deactivate power-ups
         self.clear_bullets()
         self.power_ups.reset_power_up()
+        
+        self.show_score()
         
         self.screen.fill(self.BLACK)
         boss_fight_text = self.bold_font.render("Boss Fight!", True, self.RED)
@@ -475,7 +478,9 @@ class Game:
         instruction_text = self.big_font.render("Press R to Return to menu or Q to Quit", True, self.WHITE)
         self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, self.screen_height // 2 + 50))
         pygame.display.flip()
-
+        
+        self.show_score()
+        
         waiting_for_input = True
         while waiting_for_input:
             for event in pygame.event.get():
@@ -921,7 +926,7 @@ class Boss:
                 self.game.bullet_manager.player_bullets.remove(bullet)
                 self.health -= 1
                 if self.health <= 0:
-                    self.game.display_feedback("Boss Defeated!", self.GREEN)
+                    self.game.display_feedback("Boss Defeated!", self.game.GREEN)
                     self.game.reset_game()
 
 class EnemyManager:
