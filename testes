@@ -107,7 +107,6 @@ class Game:
         self.display_score = 5000  # This will be accessed by the display thread
         self.display_thread = None
         self.power_ups = PowerUpManager(self)
-        self.display_update_interval = 0.01  # Start with 10ms interval
         self.changed_segments = set()  # Tracks changed segments for optimization
 
         # Colors
@@ -170,20 +169,15 @@ class Game:
     def start_display_thread(self):
         self.display_thread = threading.Thread(target=self.update_7seg_display)
         self.display_thread.daemon = True
-        self.display_thread.start()  
+        self.display_thread.start()
     
     def update_7seg_display(self):
-        current_score = -1  # To force first update
         while True:
-            if time.time() - self.last_display_update > self.display_update_interval:
-                if current_score != self.display_score:
-                    current_score = self.display_score
-                    self.display_changed_segments(current_score)
-                    self.last_display_update = time.time()
-                else:
-                    # If no change, just keep the display on for visibility
-                    display_number_on_7seg(current_score)
-            time.sleep(0.001)
+            self.display_update_event.wait()  # Wait for an update event
+            self.display_update_event.clear()  # Clear the event after handling it
+            
+            with self.lock:
+                display_number_on_7seg(self.display_score) 
 
     def display_changed_segments(self, number):
         # Only update what has changed
@@ -206,8 +200,9 @@ class Game:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
-        self.score = max(0, self.score + points)  # Update game score
-        self.display_score = self.score
+        with self.lock:
+            self.score = max(0, self.score + points)  # Update game score safely
+        self.display_update_event.set()
 
     def main_game_loop(self):
         self.start_time = time.time()
@@ -271,13 +266,10 @@ class Game:
             
             # Handle 7-segment display
             if is_raspberry_pi:
-                current_time = time.time()
-                elapsed_time = current_time - self.last_display_update
-                if elapsed_time > 0.05:  # If the game loop is too slow, increase display interval
-                    self.display_update_interval = min(0.05, self.display_update_interval + 0.001)
-                else:  # If the game loop is performing well, decrease the interval slightly
-                    self.display_update_interval = max(0.001, self.display_update_interval - 0.001)
-                self.display_score = self.score
+                if self.score != self.display_score:  # If score has changed
+                with self.lock:
+                    self.display_score = self.score
+                self.display_update_event.set()
 
             pygame.display.update()
             self.clock.tick(60)
