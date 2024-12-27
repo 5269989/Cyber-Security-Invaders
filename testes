@@ -55,23 +55,33 @@ if is_raspberry_pi:
     # Function to display a 4-digit number on the 7-segment display
     def display_number_on_7seg(number):
         digits = str(number).zfill(4)  # Ensure the number is 4 digits long
-        for i in range(4):  # Pre-set all digits
+        for i, digit in enumerate(digits):
+            # Select the appropriate digit to display
             digit_pins = [D1, D2, D3, D4]
-            segments = digit_to_segments[digits[i]]
-        
-            # Turn off all segments and digits first
-            for pin in pins:
-                GPIO.output(pin, GPIO.LOW)
-        
-            # Set segments for the digit without turning on the digit itself yet
-            for j, segment in enumerate([SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, SEGMENT_E, SEGMENT_F, SEGMENT_G]):
-                GPIO.output(segment, GPIO.HIGH if segments[j] == 0 else GPIO.LOW)
-        
-        # Now, quickly turn on each digit one by one for a short duration
-        for i in range(4):
-            GPIO.output(digit_pins[i], GPIO.HIGH)
-            time.sleep(0.001)  # Very short display time
-            GPIO.output(digit_pins[i], GPIO.LOW)
+            GPIO.output(digit_pins[i], GPIO.HIGH)  # Activate current digit
+            
+            # Turn on/off the segments based on the digit
+            segments = digit_to_segments[digit]
+            GPIO.output(SEGMENT_A, GPIO.HIGH if segments[0] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_B, GPIO.HIGH if segments[1] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_C, GPIO.HIGH if segments[2] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_D, GPIO.HIGH if segments[3] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_E, GPIO.HIGH if segments[4] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_F, GPIO.HIGH if segments[5] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_G, GPIO.HIGH if segments[6] == 1 else GPIO.LOW)
+            
+            # Turn off other digits to avoid overlap
+            for j in range(4):
+                if j != i:
+                    GPIO.output(digit_pins[j], GPIO.LOW)
+            
+            time.sleep(0.005)  # Multiplexing delay
+
+        # Turn off all digits after displaying
+        GPIO.output(D1, GPIO.LOW)
+        GPIO.output(D2, GPIO.LOW)
+        GPIO.output(D3, GPIO.LOW)
+        GPIO.output(D4, GPIO.LOW)
 
 pygame.init()
 pygame.mixer.init()  # Initialize the mixer for sound
@@ -94,6 +104,8 @@ class Game:
         self.start_time = 0
         self.hits = 0
         self.score = 5000
+        self.display_score = 5000  # This will be accessed by the display thread
+        self.display_thread = None
         self.power_ups = PowerUpManager(self)
 
         # Colors
@@ -141,6 +153,9 @@ class Game:
 
         # Sounds
         self.load_sounds()
+        
+        if is_raspberry_pi:
+            self.start_display_thread()
 
     def load_sounds(self):
         self.shoot_sound = pygame.mixer.Sound(os.path.join("sounds", "shoot.wav"))
@@ -149,6 +164,20 @@ class Game:
         self.wrong_answer_sound = pygame.mixer.Sound(os.path.join("sounds", "wrong.wav"))
         self.level_up_sound = pygame.mixer.Sound(os.path.join("sounds", "level_up.wav"))
         self.power_up_sound = pygame.mixer.Sound(os.path.join("sounds", "power_up.wav"))
+
+    def start_display_thread(self):
+        self.display_thread = threading.Thread(target=self.update_7seg_display)
+        self.display_thread.daemon = True  # So the thread dies when main program exits
+        self.display_thread.start()    
+    
+    def update_7seg_display(self):
+        while True:
+            display_number_on_7seg(self.display_score)
+            time.sleep(0.001)
+
+    def adjust_score(self, points):
+        self.score = max(0, self.score + points)  # Update game score
+        self.display_score = self.score
 
     def main_game_loop(self):
         self.start_time = time.time()
@@ -212,7 +241,7 @@ class Game:
             
             # Handle 7-segment display
             if is_raspberry_pi:
-                display_number_on_7seg(self.score)
+                self.display_score = self.score
 
             pygame.display.update()
             self.clock.tick(60)
