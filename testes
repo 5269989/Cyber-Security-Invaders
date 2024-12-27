@@ -107,6 +107,8 @@ class Game:
         self.display_score = 5000  # This will be accessed by the display thread
         self.display_thread = None
         self.power_ups = PowerUpManager(self)
+        self.display_update_interval = 0.01  # Start with 10ms interval
+        self.changed_segments = set()  # Tracks changed segments for optimization
 
         # Colors
         self.BLACK = (0, 0, 0)
@@ -167,13 +169,41 @@ class Game:
 
     def start_display_thread(self):
         self.display_thread = threading.Thread(target=self.update_7seg_display)
-        self.display_thread.daemon = True  # So the thread dies when main program exits
-        self.display_thread.start()    
+        self.display_thread.daemon = True
+        self.display_thread.start()  
     
     def update_7seg_display(self):
+        current_score = -1  # To force first update
         while True:
-            display_number_on_7seg(self.display_score)
+            if time.time() - self.last_display_update > self.display_update_interval:
+                if current_score != self.display_score:
+                    current_score = self.display_score
+                    self.display_changed_segments(current_score)
+                    self.last_display_update = time.time()
+                else:
+                    # If no change, just keep the display on for visibility
+                    display_number_on_7seg(current_score)
             time.sleep(0.001)
+
+    def display_changed_segments(self, number):
+        # Only update what has changed
+        new_digits = str(number).zfill(4)
+        for i, digit in enumerate(new_digits):
+            if digit != str(self.display_score).zfill(4)[i]:
+                self.changed_segments.add(i)
+        for i in self.changed_segments:
+            self.display_digit(i, new_digits[i])
+        self.changed_segments.clear()
+        
+    def display_digit(self, position, digit):
+        digit_pins = [D1, D2, D3, D4]
+        GPIO.output(digit_pins[position], GPIO.HIGH)  # Activate current digit
+        segments = digit_to_segments[digit]
+        for j, segment in enumerate([SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, SEGMENT_E, SEGMENT_F, SEGMENT_G]):
+            GPIO.output(segment, GPIO.HIGH if segments[j] == 1 else GPIO.LOW)
+        for j in range(4):
+            if j != position:
+                GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
         self.score = max(0, self.score + points)  # Update game score
@@ -241,6 +271,12 @@ class Game:
             
             # Handle 7-segment display
             if is_raspberry_pi:
+                current_time = time.time()
+                elapsed_time = current_time - self.last_display_update
+                if elapsed_time > 0.05:  # If the game loop is too slow, increase display interval
+                    self.display_update_interval = min(0.05, self.display_update_interval + 0.001)
+                else:  # If the game loop is performing well, decrease the interval slightly
+                    self.display_update_interval = max(0.001, self.display_update_interval - 0.001)
                 self.display_score = self.score
 
             pygame.display.update()
