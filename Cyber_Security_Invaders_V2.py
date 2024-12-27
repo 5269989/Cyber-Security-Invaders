@@ -11,7 +11,8 @@ import requests
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
 
 if is_raspberry_pi:
-    import RPi.GPIO as GPIO
+    import RPi.GPIO as GPIO, threading
+    from threading import Event
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
     GREEN_LED_PIN = 20
@@ -19,52 +20,69 @@ if is_raspberry_pi:
     GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
     GPIO.setup(RED_LED_PIN, GPIO.OUT)
 
-    # Setup for 7-segment display
-    SEGMENTS = {
-        'a': 4, 'b': 18, 'c': 24, 'd': 23, 'e': 22, 'f': 17, 'g': 27
-    }
-    DIGITS = {
-        1: 16, 2: 25, 3: 26, 4: 5
-    }
+    # Define the GPIO pins connected to segments and digits
+    D4 = 16
+    D3 = 25
+    D2 = 26
+    D1 = 5
 
-    for segment in SEGMENTS.values():
-        GPIO.setup(segment, GPIO.OUT)
-        GPIO.output(segment, GPIO.HIGH)  # Turn off all segments (common anode)
+    SEGMENT_A = 4
+    SEGMENT_F = 17
+    SEGMENT_B = 18
+    SEGMENT_E = 22
+    SEGMENT_D = 23
+    SEGMENT_C = 24
+    SEGMENT_G = 27
 
-    for digit in DIGITS.values():
-        GPIO.setup(digit, GPIO.OUT)
-        GPIO.output(digit, GPIO.HIGH)  # Turn off all digits initially
+    
+    GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
+    pins = [SEGMENT_A, SEGMENT_F, SEGMENT_B, SEGMENT_E, SEGMENT_D, SEGMENT_C, SEGMENT_G, D1, D2, D3, D4]
+    GPIO.setup(pins, GPIO.OUT)
 
+    # Digit to segment mapping (0-9)
+    digit_to_segments = {
+        '0': [0, 0, 0, 0, 0, 0, 1],
+        '1': [1, 0, 0, 1, 1, 1, 1],
+        '2': [0, 0, 1, 0, 0, 1, 0],
+        '3': [0, 0, 0, 0, 1, 1, 0],
+        '4': [1, 0, 0, 1, 1, 0, 0],
+        '5': [0, 1, 0, 0, 1, 0, 0],
+        '6': [0, 1, 0, 0, 0, 0, 0],
+        '7': [0, 0, 0, 1, 1, 1, 1],
+        '8': [0, 0, 0, 0, 0, 0, 0],
+        '9': [0, 0, 0, 0, 1, 0, 0]
+    }        # A  B  C  D  E  F  G
+
+    # Function to display a 4-digit number on the 7-segment display
     def display_number_on_7seg(number):
-        if number < 0 or number > 9999:
-            return  # Out of range for a 4-digit display
-    
-        digits = [int(d) for d in str(number).zfill(4)]
-    
-        for _ in range(100):  # Adjust this number for visibility vs performance
-            for i, digit_value in enumerate(digits):
-                digit_pin = DIGITS[i + 1]
+        digits = str(number).zfill(4)  # Ensure the number is 4 digits long
+        for i, digit in enumerate(digits):
+            # Select the appropriate digit to display
+            digit_pins = [D1, D2, D3, D4]
+            GPIO.output(digit_pins[i], GPIO.HIGH)  # Activate current digit
             
-                # Turn on the current digit (common anode, LOW to activate)
-                GPIO.output(digit_pin, GPIO.LOW)
+            # Turn on/off the segments based on the digit
+            segments = digit_to_segments[digit]
+            GPIO.output(SEGMENT_A, GPIO.HIGH if segments[0] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_B, GPIO.HIGH if segments[1] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_C, GPIO.HIGH if segments[2] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_D, GPIO.HIGH if segments[3] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_E, GPIO.HIGH if segments[4] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_F, GPIO.HIGH if segments[5] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_G, GPIO.HIGH if segments[6] == 1 else GPIO.LOW)
             
-                # Displaying each segment for the digit
-                segments_on = get_segments_for_digit(digit_value)
-                for segment, pin in SEGMENTS.items():
-                    GPIO.output(pin, GPIO.HIGH if segment in segments_on else GPIO.LOW)  # HIGH for on with common anode
+            # Turn off other digits to avoid overlap
+            for j in range(4):
+                if j != i:
+                    GPIO.output(digit_pins[j], GPIO.LOW)
             
-                # Short delay for visibility, but not too long to affect gameplay
-                time.sleep(0.001)  
-            
-                # Turn off the current digit to prepare for the next one
-                GPIO.output(digit_pin, GPIO.HIGH)
+            time.sleep(0.005)  # Multiplexing delay
 
-    def get_segments_for_digit(digit):
-        segment_map = {
-            0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 
-            5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg'
-        }
-        return segment_map.get(digit, '')
+        # Turn off all digits after displaying
+        GPIO.output(D1, GPIO.LOW)
+        GPIO.output(D2, GPIO.LOW)
+        GPIO.output(D3, GPIO.LOW)
+        GPIO.output(D4, GPIO.LOW)
 
 pygame.init()
 pygame.mixer.init()  # Initialize the mixer for sound
@@ -87,7 +105,12 @@ class Game:
         self.start_time = 0
         self.hits = 0
         self.score = 5000
+        self.display_score = 5000  # This will be accessed by the display thread
+        self.display_thread = None
         self.power_ups = PowerUpManager(self)
+        self.changed_segments = set()  # Tracks changed segments for optimization
+        self.display_update_event = Event()
+        self.lock = threading.Lock()
 
         # Colors
         self.BLACK = (0, 0, 0)
@@ -134,6 +157,9 @@ class Game:
 
         # Sounds
         self.load_sounds()
+        
+        if is_raspberry_pi:
+            self.start_display_thread()
 
     def load_sounds(self):
         self.shoot_sound = pygame.mixer.Sound(os.path.join("sounds", "shoot.wav"))
@@ -142,6 +168,44 @@ class Game:
         self.wrong_answer_sound = pygame.mixer.Sound(os.path.join("sounds", "wrong.wav"))
         self.level_up_sound = pygame.mixer.Sound(os.path.join("sounds", "level_up.wav"))
         self.power_up_sound = pygame.mixer.Sound(os.path.join("sounds", "power_up.wav"))
+
+    def start_display_thread(self):
+        self.display_thread = threading.Thread(target=self.update_7seg_display)
+        self.display_thread.daemon = True
+        self.display_thread.start()
+    
+    def update_7seg_display(self):
+        while True:
+            self.display_update_event.wait()  # Wait for an update event
+            self.display_update_event.clear()  # Clear the event after handling it
+            
+            with self.lock:
+                display_number_on_7seg(self.display_score) 
+
+    def display_changed_segments(self, number):
+        # Only update what has changed
+        new_digits = str(number).zfill(4)
+        for i, digit in enumerate(new_digits):
+            if digit != str(self.display_score).zfill(4)[i]:
+                self.changed_segments.add(i)
+        for i in self.changed_segments:
+            self.display_digit(i, new_digits[i])
+        self.changed_segments.clear()
+        
+    def display_digit(self, position, digit):
+        digit_pins = [D1, D2, D3, D4]
+        GPIO.output(digit_pins[position], GPIO.HIGH)  # Activate current digit
+        segments = digit_to_segments[digit]
+        for j, segment in enumerate([SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, SEGMENT_E, SEGMENT_F, SEGMENT_G]):
+            GPIO.output(segment, GPIO.HIGH if segments[j] == 1 else GPIO.LOW)
+        for j in range(4):
+            if j != position:
+                GPIO.output(digit_pins[j], GPIO.LOW)
+
+    def adjust_score(self, points):
+        with self.lock:
+            self.score = max(0, self.score + points)  # Update game score safely
+        self.display_update_event.set()
 
     def main_game_loop(self):
         self.start_time = time.time()
@@ -205,7 +269,10 @@ class Game:
             
             # Handle 7-segment display
             if is_raspberry_pi:
-                display_number_on_7seg(self.score)
+                if self.score != self.display_score:  # If score has changed
+                    with self.lock:
+                        self.display_score = self.score
+                self.display_update_event.set()
 
             pygame.display.update()
             self.clock.tick(60)
