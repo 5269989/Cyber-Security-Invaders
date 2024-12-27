@@ -15,10 +15,10 @@ if is_raspberry_pi:
     from threading import Event
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
+    
     GREEN_LED_PIN = 20
     RED_LED_PIN = 21
-    GPIO.setup(GREEN_LED_PIN, GPIO.OUT)
-    GPIO.setup(RED_LED_PIN, GPIO.OUT)
+    
 
     # Define the GPIO pins connected to segments and digits
     D4 = 16
@@ -36,7 +36,7 @@ if is_raspberry_pi:
 
     
     GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
-    pins = [SEGMENT_A, SEGMENT_F, SEGMENT_B, SEGMENT_E, SEGMENT_D, SEGMENT_C, SEGMENT_G, D1, D2, D3, D4]
+    pins = [SEGMENT_A, SEGMENT_F, SEGMENT_B, SEGMENT_E, SEGMENT_D, SEGMENT_C, SEGMENT_G, D1, D2, D3, D4, GREEN_LED_PIN, RED_LED_PIN]
     GPIO.setup(pins, GPIO.OUT)
 
     # Digit to segment mapping (0-9)
@@ -78,7 +78,7 @@ if is_raspberry_pi:
                 if j != i:
                     GPIO.output(digit_pins[j], GPIO.LOW)
             
-            while time.perf_counter() - start_time < 0.0005 * (i + 1):
+            while time.perf_counter() - start_time < 0.001 * (i + 1):
                 pass
 
         # Turn off all digits after displaying
@@ -86,6 +86,9 @@ if is_raspberry_pi:
         GPIO.output(D2, GPIO.LOW)
         GPIO.output(D3, GPIO.LOW)
         GPIO.output(D4, GPIO.LOW)
+
+else:
+    print("Not running on RPi, GPIO functionality disabled.")
 
 pygame.init()
 pygame.mixer.init()  # Initialize the mixer for sound
@@ -98,7 +101,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.game_over = False
         self.level = 1
-        self.total_levels = 2
+        self.total_levels = 5
         self.boss_fight = False
         self.question_limit = 3
         self.questions_asked = 0
@@ -108,13 +111,15 @@ class Game:
         self.start_time = 0
         self.hits = 0
         self.score = 5000
-        self.display_score = 5000  # This will be accessed by the display thread
-        self.display_thread = None
         self.power_ups = PowerUpManager(self)
-        self.changed_segments = set()  # Tracks changed segments for optimization
-        self.display_update_event = Event()
-        self.lock = threading.Lock()
-
+        
+        if is_raspberry_pi:
+            self.changed_segments = set()  # Tracks changed segments for optimization
+            self.display_update_event = Event()
+            self.lock = threading.Lock()
+            self.display_score = 5000  # This will be accessed by the display thread
+            self.display_thread = None
+            
         # Colors
         self.BLACK = (0, 0, 0)
         self.WHITE = (255, 255, 255)
@@ -562,15 +567,6 @@ class Game:
         self.enemy_manager.enemies = game_state['enemies']
         self.display_feedback("Game Loaded!", self.GREEN)
         return True
-
-    def boss_defeated_screen(self):
-        self.screen.fill(self.BLACK)
-        defeated_text = self.bold_font.render("Boss Defeated!", True, self.GREEN)
-        self.screen.blit(defeated_text, (self.screen_width // 2 - defeated_text.get_width() // 2, self.screen_height // 2 - defeated_text.get_height() // 2))
-        pygame.display.flip()
-        pygame.time.wait(2000)  # Show for 2 seconds
-        self.end_game_screen()  # Changed to show end game screen for score input
-        self.power_ups.reset_power_up()
         
     def check_server_availability(self):
         try:
@@ -626,20 +622,13 @@ class Game:
                     waiting = False
         self.show_menu()
 
-    def level_complete_screen(self):
-        self.screen.fill(self.BLACK)
-        complete_text = self.bold_font.render(f"Level {self.level - 1} Complete!", True, self.GREEN)
-        self.screen.blit(complete_text, (self.screen_width // 2 - complete_text.get_width() // 2, self.screen_height // 2 - complete_text.get_height() // 2))
-        self.level_up_sound.play()
+    def clear_level(self):
         
         # Clear player bullets and deactivate power-ups
         self.clear_bullets()
         self.power_ups.reset_power_up()  # Reset power-ups
         self.power_ups.spawn_time = time.time()  # Reset spawn timer
         self.power_ups.spawn_power_up()  # Spawn a new power-up
-
-        pygame.display.flip()
-        pygame.time.wait(2000)  # Show for 2 seconds
 
     def show_instructions(self):
         self.screen.fill(self.BLACK)
@@ -929,7 +918,7 @@ class Boss:
                 self.game.bullet_manager.player_bullets.remove(bullet)
                 self.health -= 1
                 if self.health <= 0:
-                    self.game.boss_defeated_screen()
+                    self.game.display_feedback("Boss Defeated!", self.GREEN)
                     self.game.reset_game()
 
 class EnemyManager:
@@ -963,7 +952,9 @@ class EnemyManager:
             if self.game.level < self.game.total_levels:
                 self.game.level += 1
                 self.increase_difficulty()
-                self.game.level_complete_screen()
+                self.game.level_up_sound.play()
+                self.game.display_feedback("Level " + str(self.game.level - 1) + " Complete!", self.game.GREEN)
+                self.game.clear_level()
                 self.create_enemies()
             else:
                 self.game.boss_fight_splash_screen()
