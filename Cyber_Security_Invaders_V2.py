@@ -38,22 +38,26 @@ if is_raspberry_pi:
     def display_number_on_7seg(number):
         if number < 0 or number > 9999:
             return  # Out of range for a 4-digit display
-        
+    
         digits = [int(d) for d in str(number).zfill(4)]
-        
-        for i, digit_value in enumerate(digits):
-            digit_pin = DIGITS[i + 1]
-            GPIO.output(digit_pin, GPIO.LOW)  # Turn on digit
+    
+        for _ in range(100):  # Adjust this number for visibility vs performance
+            for i, digit_value in enumerate(digits):
+                digit_pin = DIGITS[i + 1]
             
-            # Displaying each segment for the digit
-            segments_on = get_segments_for_digit(digit_value)
-            for segment, pin in SEGMENTS.items():
-                GPIO.output(pin, GPIO.LOW if segment in segments_on else GPIO.HIGH)  # LOW for on with common anode
+                # Turn on the current digit (common anode, LOW to activate)
+                GPIO.output(digit_pin, GPIO.LOW)
             
-            # Brief delay for visibility
-            time.sleep(0.001)  # Very short delay for human eye persistence
+                # Displaying each segment for the digit
+                segments_on = get_segments_for_digit(digit_value)
+                for segment, pin in SEGMENTS.items():
+                    GPIO.output(pin, GPIO.HIGH if segment in segments_on else GPIO.LOW)  # HIGH for on with common anode
             
-            GPIO.output(digit_pin, GPIO.HIGH)  # Turn off digit
+                # Short delay for visibility, but not too long to affect gameplay
+                time.sleep(0.001)  
+            
+                # Turn off the current digit to prepare for the next one
+                GPIO.output(digit_pin, GPIO.HIGH)
 
     def get_segments_for_digit(digit):
         segment_map = {
