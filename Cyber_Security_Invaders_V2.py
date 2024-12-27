@@ -51,13 +51,15 @@ if is_raspberry_pi:
         '7': [0, 0, 0, 1, 1, 1, 1],
         '8': [0, 0, 0, 0, 0, 0, 0],
         '9': [0, 0, 0, 0, 1, 0, 0]
-    }        # A  B  C  D  E  F  G
+    }       # A  B  C  D  E  F  G
 
     # Function to display a 4-digit number on the 7-segment display
     def display_number_on_7seg(number):
         digits = str(number).zfill(4)  # Ensure the number is 4 digits long
+        start_time = time.perf_counter()
         for i, digit in enumerate(digits):
             # Select the appropriate digit to display
+            
             digit_pins = [D1, D2, D3, D4]
             GPIO.output(digit_pins[i], GPIO.HIGH)  # Activate current digit
             
@@ -76,7 +78,8 @@ if is_raspberry_pi:
                 if j != i:
                     GPIO.output(digit_pins[j], GPIO.LOW)
             
-            time.sleep(0.005)  # Multiplexing delay
+            while time.perf_counter() - start_time < 0.0005 * (i + 1):
+                pass
 
         # Turn off all digits after displaying
         GPIO.output(D1, GPIO.LOW)
