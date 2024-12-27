@@ -1,72 +1,54 @@
 import RPi.GPIO as GPIO
 import time
 
-Define GPIO pins for digits
-DIGITS = {
-    1: 16,  # Digit 1 connected to GPIO 16
-    2: 25,  # Digit 2 connected to GPIO 25
-    3: 26,  # Digit 3 connected to GPIO 26
-    4: 5    # Digit 4 connected to GPIO 5
-}
-
-Define GPIO pins for segments
-SEGMENTS = {
-    'a': 4, 'b': 18, 'c': 24, 'd': 23, 'e': 22, 'f': 17, 'g': 27
-}
-
-Define segment patterns for numbers 0-9
-DIGIT_PATTERNS = {
-    0: ('a', 'b', 'c', 'd', 'e', 'f'),
-    1: ('b', 'c'),
-    2: ('a', 'b', 'g', 'e', 'd'),
-    3: ('a', 'b', 'g', 'c', 'd'),
-    4: ('f', 'g', 'b', 'c'),
-    5: ('a', 'f', 'g', 'c', 'd'),
-    6: ('a', 'f', 'g', 'e', 'd', 'c'),
-    7: ('a', 'b', 'c'),
-    8: ('a', 'b', 'c', 'd', 'e', 'f', 'g'),
-    9: ('a', 'b', 'c', 'f', 'g')
-}
-
-Setup GPIO
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
-Setup segment pins as output
+# Define GPIO pins for segments (common anode, so LOW means ON)
 for segment in SEGMENTS.values():
     GPIO.setup(segment, GPIO.OUT)
+    GPIO.output(segment, GPIO.HIGH)  # Initially off for common anode
 
-Setup digit pins as output
-for digit_pin in DIGITS.values():
-    GPIO.setup(digit_pin, GPIO.OUT)
+# Setup GPIO pins for digits
+digits = [16, 25, 26, 5]  # GPIO pins for digits 1, 2, 3, 4 respectively
+for digit in digits:
+    GPIO.setup(digit, GPIO.OUT)
+    GPIO.output(digit, GPIO.HIGH)  # Initially off for common anode
+
+def light_segment(segment, on=True):
+    GPIO.output(SEGMENTS[segment], GPIO.LOW if on else GPIO.HIGH)
 
 def display_digit(digit, number):
-    # Turn off all digits
-    for digit_pin in DIGITS.values():
-        GPIO.output(digit_pin, GPIO.LOW)
+    # Dictionary for segment configuration for digits 0-9 (common anode)
+    digit_segments = {
+        0: ['a', 'b', 'c', 'd', 'e', 'f'], 
+        1: ['b', 'c'], 
+        2: ['a', 'b', 'g', 'e', 'd'], 
+        3: ['a', 'b', 'g', 'c', 'd'], 
+        4: ['f', 'g', 'b', 'c'], 
+        5: ['a', 'f', 'g', 'c', 'd'], 
+        6: ['a', 'f', 'g', 'c', 'd', 'e'], 
+        7: ['a', 'b', 'c'], 
+        8: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], 
+        9: ['a', 'b', 'c', 'd', 'f', 'g']
+    }
+    
+    # Turn off all segments first
+    for segment in 'abcdefg':
+        light_segment(segment, False)
+    
+    # Light up appropriate segments
+    if number in digit_segments:
+        for segment in digit_segments[number]:
+            light_segment(segment)
+    
+    # Light up the selected digit
+    GPIO.output(digits[digit], GPIO.LOW)  # LOW to show the digit for common anode
+    time.sleep(0.001)  # Short delay to see the digit
+    GPIO.output(digits[digit], GPIO.HIGH)  # Turn off the digit
 
-# Turn on the selected digit
-GPIO.output(DIGITS[digit], GPIO.HIGH)
+# Example usage to show '1234' for a second
+for i in range(4):
+    display_digit(i, i + 1)
 
-# Display the number on the segments
-for segment, pin in SEGMENTS.items():
-    if segment in DIGIT_PATTERNS[number]:
-        GPIO.output(pin, GPIO.LOW)  # Active low for LEDs
-    else:
-        GPIO.output(pin, GPIO.HIGH)
-def display_number(number):
-    # Convert number to string and pad with zeros if needed
-    num_str = f"{number:04d}"
-
-for i, digit in enumerate(num_str):
-    display_digit(i+1, int(digit))
-    time.sleep(0.001)  # Short delay for persistence of vision
-Example usage
-try:
-    while True:
-        display_number(1234)  # Display '1234' on the display
-except KeyboardInterrupt:
-    pass
-
-Clean up GPIO on exit
 GPIO.cleanup()
