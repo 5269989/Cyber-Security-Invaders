@@ -1,54 +1,44 @@
 import RPi.GPIO as GPIO
 import time
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
+# Define the GPIO pins connected to segments 'a' and 'f'
+SEGMENT_A = 4
+SEGMENT_F = 17
 
-# Define GPIO pins for segments (common anode, so LOW means ON)
-for segment in SEGMENTS.values():
-    GPIO.setup(segment, GPIO.OUT)
-    GPIO.output(segment, GPIO.HIGH)  # Initially off for common anode
+# Setup GPIO
+def setup():
+    GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
+    GPIO.setup(SEGMENT_A, GPIO.OUT)  # Set GPIO 4 as an output
+    GPIO.setup(SEGMENT_F, GPIO.OUT)  # Set GPIO 17 as an output
 
-# Setup GPIO pins for digits
-digits = [16, 25, 26, 5]  # GPIO pins for digits 1, 2, 3, 4 respectively
-for digit in digits:
-    GPIO.setup(digit, GPIO.OUT)
-    GPIO.output(digit, GPIO.HIGH)  # Initially off for common anode
+# Light up segments 'a' and 'f'
+def light_up_segments():
+    GPIO.output(SEGMENT_A, GPIO.LOW)  # Set to LOW to light up segment 'a'
+    GPIO.output(SEGMENT_F, GPIO.LOW)  # Set to LOW to light up segment 'f'
 
-def light_segment(segment, on=True):
-    GPIO.output(SEGMENTS[segment], GPIO.LOW if on else GPIO.HIGH)
+# Turn off segments 'a' and 'f'
+def turn_off_segments():
+    GPIO.output(SEGMENT_A, GPIO.HIGH)  # Set to HIGH to turn off segment 'a'
+    GPIO.output(SEGMENT_F, GPIO.HIGH)  # Set to HIGH to turn off segment 'f'
 
-def display_digit(digit, number):
-    # Dictionary for segment configuration for digits 0-9 (common anode)
-    digit_segments = {
-        0: ['a', 'b', 'c', 'd', 'e', 'f'], 
-        1: ['b', 'c'], 
-        2: ['a', 'b', 'g', 'e', 'd'], 
-        3: ['a', 'b', 'g', 'c', 'd'], 
-        4: ['f', 'g', 'b', 'c'], 
-        5: ['a', 'f', 'g', 'c', 'd'], 
-        6: ['a', 'f', 'g', 'c', 'd', 'e'], 
-        7: ['a', 'b', 'c'], 
-        8: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], 
-        9: ['a', 'b', 'c', 'd', 'f', 'g']
-    }
-    
-    # Turn off all segments first
-    for segment in 'abcdefg':
-        light_segment(segment, False)
-    
-    # Light up appropriate segments
-    if number in digit_segments:
-        for segment in digit_segments[number]:
-            light_segment(segment)
-    
-    # Light up the selected digit
-    GPIO.output(digits[digit], GPIO.LOW)  # LOW to show the digit for common anode
-    time.sleep(0.001)  # Short delay to see the digit
-    GPIO.output(digits[digit], GPIO.HIGH)  # Turn off the digit
+# Main function
+def main():
+    try:
+        setup()
+        
+        while True:
+            light_up_segments()  # Light up both segments 'a' and 'f'
+            print("Segments 'a' and 'f' are lit")
+            time.sleep(2)  # Keep them lit for 2 seconds
+            
+            turn_off_segments()  # Turn off both segments 'a' and 'f'
+            print("Segments 'a' and 'f' are off")
+            time.sleep(2)  # Pause for 2 seconds before repeating
 
-# Example usage to show '1234' for a second
-for i in range(4):
-    display_digit(i, i + 1)
+    except KeyboardInterrupt:
+        print("\nProgram interrupted by user")
+    finally:
+        GPIO.cleanup()  # Clean up GPIO on exit
 
-GPIO.cleanup()
+if __name__ == "__main__":
+    main()
