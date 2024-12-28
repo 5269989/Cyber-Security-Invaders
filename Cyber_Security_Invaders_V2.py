@@ -919,7 +919,7 @@ class Boss:
                 self.health -= 1
                 if self.health <= 0:
                     self.game.display_feedback("Boss Defeated!", self.game.GREEN)
-                    self.end_game_screen()  # Changed to show end game screen for score input
+                    self.game.end_game_screen()  # Changed to show end game screen for score input
                     self.power_ups.reset_power_up()
                     self.game.reset_game()
 
@@ -1024,6 +1024,7 @@ class BulletManager:
         self.boss_bullets.append([x, y])
 
     def update_player_bullets(self):
+        bullets_to_remove = []
         for bullet in self.player_bullets[:]:
             x, y, height, angle = bullet
             
@@ -1047,18 +1048,22 @@ class BulletManager:
             # Draw the rotated rectangle
             pygame.draw.polygon(self.game.screen, self.game.GREEN, rect_points)
 
-            # Remove bullet if it's off-screen
+            # Check for conditions to remove bullet
             if bullet[1] < 0 or bullet[0] < 0 or bullet[0] > self.game.screen_width:
-                self.player_bullets.remove(bullet)
-            
-            # Check for collision with enemies
+                bullets_to_remove.append(bullet)
+        
+            # Check for enemy collision
             for enemy in self.game.enemy_manager.enemies[:]:
-                # Simplified collision detection; for accuracy, consider using a more complex method
                 if (enemy[0] < x < enemy[0] + 40 and enemy[1] < y < enemy[1] + 40) or \
                    (enemy[0] < x + height * math.sin(angle) < enemy[0] + 40 and enemy[1] < y - height * math.cos(angle) < enemy[1] + 40):
-                    self.player_bullets.remove(bullet)
+                    bullets_to_remove.append(bullet)
                     self.game.enemy_manager.enemies.remove(enemy)
                     break
+
+        # Remove all bullets marked for deletion
+        for bullet in bullets_to_remove:
+            if bullet in self.player_bullets:  # Double check if the bullet is still in the list
+                self.player_bullets.remove(bullet)
 
     def update_enemy_bullets(self):
         for bullet in self.enemy_bullets[:]:
