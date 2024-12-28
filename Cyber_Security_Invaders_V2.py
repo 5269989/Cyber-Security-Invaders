@@ -101,7 +101,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.game_over = False
         self.level = 1
-        self.total_levels = 5
+        self.total_levels = 2
         self.boss_fight = False
         self.question_limit = 3
         self.questions_asked = 0
@@ -184,11 +184,11 @@ class Game:
     
     def update_7seg_display(self):
         while True:
-            self.display_update_event.wait()  # Wait for an update event
-            self.display_update_event.clear()  # Clear the event after handling it
-            
+            self.display_update_event.wait()
+            self.display_update_event.clear()
+        
             with self.lock:
-                display_number_on_7seg(self.display_score) 
+                display_number_on_7seg(self.display_score)
 
     def display_changed_segments(self, number):
         # Only update what has changed
@@ -277,11 +277,7 @@ class Game:
             
             # Handle 7-segment display
             if is_raspberry_pi:
-                if self.score != self.display_score:  # If score has changed
-                    with self.lock:
-                        self.display_score = self.score
-                self.display_update_event.set()
-
+                self.display_update_event.set()  # Signal to update display every frame or at least often
             pygame.display.update()
             self.clock.tick(60)
 
@@ -435,7 +431,8 @@ class Game:
     def display_feedback(self, message, color):
         self.screen.fill(self.BLACK)
         feedback_text = self.bold_font.render(message, True, color)
-        self.screen.blit(feedback_text, (self.screen_width // 2 - feedback_text.get_width() // 2, self.screen_height // 2 - feedback_text.get_height() // 2))
+        text_rect = feedback_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2))
+        self.screen.blit(feedback_text, text_rect)
         pygame.display.flip()
 
         if is_raspberry_pi:
@@ -446,11 +443,24 @@ class Game:
                 GPIO.output(RED_LED_PIN, GPIO.HIGH)
                 GPIO.output(GREEN_LED_PIN, GPIO.LOW)
 
-        pygame.time.wait(2000)
-
+        # Update the score on the 7-segment display before showing feedback
         if is_raspberry_pi:
-            GPIO.output(GREEN_LED_PIN, GPIO.LOW)
-            GPIO.output(RED_LED_PIN, GPIO.LOW)
+            with self.lock:
+                self.display_score = self.score
+            self.display_update_event.set()  # Signal to update the display
+
+        # Use non-blocking delay for feedback display
+        start_time = time.time()
+        while time.time() - start_time < 2:  # 2 seconds delay
+            pygame.event.pump()  # Keep Pygame responsive
+            if is_raspberry_pi:
+                self.display_update_event.set()  # Ensure the display updates during feedback
+            pygame.time.delay(100)  # Short sleep to not hog CPU
+
+    # Turn off LEDs after feedback period
+    if is_raspberry_pi:
+        GPIO.output(GREEN_LED_PIN, GPIO.LOW)
+        GPIO.output(RED_LED_PIN, GPIO.LOW)
 
     def boss_fight_splash_screen(self):
         # Clear player bullets and deactivate power-ups
@@ -918,7 +928,9 @@ class Boss:
                 self.game.bullet_manager.player_bullets.remove(bullet)
                 self.health -= 1
                 if self.health <= 0:
-                    self.game.display_feedback("Boss Defeated!", self.GREEN)
+                    self.game.display_feedback("Boss Defeated!", self.game.GREEN)
+                    self.game.end_game_screen()  # Changed to show end game screen for score input
+                    self.power_ups.reset_power_up()
                     self.game.reset_game()
 
 class EnemyManager:
