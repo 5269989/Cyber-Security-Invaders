@@ -9,7 +9,7 @@
 - **Levels and Difficulty:** Progress through multiple levels, each with increasing difficulty and faster enemies.
 - **Game Over Mechanics:** The game ends if any enemy reaches the bottom of the screen or if the player loses all lives.
 - **Visuals:** Utilize PNG images for player and enemy sprites, enhancing the game's visual appeal.
-- **Leaderboard System:** Flask server for score tracking and display.
+- **Leaderboard System:** Cloud flask server for score tracking and display.
 
 ## Getting Started
 
@@ -17,7 +17,6 @@
 
 - **Python:** Version 3.x
 - **Pygame:** For game graphics and sound
-- **Flask:** For running the leaderboard server
 - **RPi.GPIO (optional):** If running on Raspberry Pi for LED feedback
 
 ### Installation
@@ -31,9 +30,9 @@
    . cd cyber-security-invaders
    ```
 4. **Install dependencies:**
-- Ensure Pygame and Flask are installed. If not, install them using:
+- Ensure Pygame is installed. If not, install it using:
   ```
-  pip install pygame/flask
+  pip install pygame
   ```
 - If you're using a Raspberry Pi and want GPIO integration:
   ```
@@ -42,18 +41,7 @@
 
 ### Running the Game
 
-1. **Start the Flask Server** (for leaderboard functionality):
-- Navigate to the Flask server directory:
-  ```
-  cd FlaskServer
-  ```
-- Run the server:
-  ```
-  python server.py
-  ```
-- Keep this terminal open as the server needs to run continuously.
-
-2. **Run the Game:**
+**Run the Game:**
 - Open a new terminal or command prompt.
 - Navigate back to the game directory if necessary:
   ```
@@ -80,17 +68,9 @@
 
 ### Troubleshooting
 
-- **Server Not Responding:** Check if the server is running and that your firewall allows connections on port 5000.
+- **Server Not Responding:** The leaderboard server may be down
 - **Game Freezes:** Verify Python, Pygame, and all dependencies are correctly installed. Also, check server IP in the game code.
 - **GPIO Issues on Raspberry Pi:** Ensure you have the necessary permissions and that GPIO pins are correctly configured.
-
-## Contributing
-
-If you'd like to contribute, please fork the project, make your changes, and submit a pull request. Here's how you can contribute:
-
-- Follow PEP 8 for Python code style.
-- Add tests or update existing ones for new features or bug fixes.
-- Update documentation if you change how the game or server operates.
 
 ## License
 
