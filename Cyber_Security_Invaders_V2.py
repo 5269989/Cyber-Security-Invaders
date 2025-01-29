@@ -6,6 +6,7 @@ import platform
 import json
 import math
 import requests
+import datetime  
 
 # Check if running on a Raspberry Pi
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
@@ -112,6 +113,11 @@ class Game:
         self.hits = 0
         self.score = 5000
         self.power_ups = PowerUpManager(self)
+        self.paused = False
+        self.save_slots = [None, None, None]  # Stores 3 save games
+        self.selected_save_slot = 0
+        self.loaded_from_menu = False
+        self.save_name_input = ""
         
         if is_raspberry_pi:
             self.changed_segments = set()  # Tracks changed segments for optimization
@@ -225,9 +231,17 @@ class Game:
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     quit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.paused = not self.paused
                 elif event.type == pygame.USEREVENT + 1:
                     if hasattr(self, 'score_adjustment') and time.time() - self.score_adjustment_time >= 2:
                         del self.score_adjustment
+                        
+            if self.paused:
+                self.draw_pause_menu()
+                pygame.display.flip()
+                continue
 
             keys = pygame.key.get_pressed()
             self.player.move(keys)
@@ -241,6 +255,9 @@ class Game:
                     self.score -= 25  # Deduct 25 points per second
                     self.score = max(0, self.score)  # Ensure score doesn't go below 0
                     last_score_update_time = current_time  # Reset for next frame
+
+            if keys[pygame.K_ESCAPE]:
+                self.paused = not self.paused
 
             self.player.check_invulnerability()
 
@@ -285,6 +302,84 @@ class Game:
             pygame.display.update()
             self.clock.tick(60)
 
+    def draw_pause_menu(self):
+        # Dark overlay
+        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+    
+        # PAUSED text
+        paused_text = self.bold_font.render("PAUSED", True, self.WHITE)
+        self.screen.blit(paused_text, (self.screen_width//2 - paused_text.get_width()//2, 150))
+
+        # Save Game button
+        save_rect = pygame.Rect(self.screen_width//2 - 150, 250, 300, 50)
+        pygame.draw.rect(self.screen, self.GREEN, save_rect)
+        save_text = self.font.render("Save Game", True, self.BLACK)
+        self.screen.blit(save_text, (save_rect.x + 90, save_rect.y + 15))
+
+        # Return to Menu button
+        menu_rect = pygame.Rect(self.screen_width//2 - 150, 320, 300, 50)
+        pygame.draw.rect(self.screen, self.RED, menu_rect)
+        menu_text = self.font.render("Return to Menu", True, self.WHITE)
+        self.screen.blit(menu_text, (menu_rect.x + 70, menu_rect.y + 15))
+
+        # Handle clicks
+        mouse_pos = pygame.mouse.get_pos()
+        if pygame.mouse.get_pressed()[0]:
+            if save_rect.collidepoint(mouse_pos):
+                self.show_save_slot_menu()
+            elif menu_rect.collidepoint(mouse_pos):
+                self.game_over = True
+                self.show_menu()
+        
+    def show_save_slot_menu(self):
+        selected_slot = 0
+        name_input = ""
+    
+        while True:
+            self.screen.fill(self.BLACK)
+            title = self.big_font.render("Select Save Slot", True, self.YELLOW)
+            self.screen.blit(title, (self.screen_width//2 - title.get_width()//2, 50))
+        
+            # Draw slots
+            slot_y = 150
+            for i in range(3):
+                slot_rect = pygame.Rect(200, slot_y, 800, 100)
+                color = self.GREEN if i == selected_slot else self.WHITE
+                pygame.draw.rect(self.screen, color, slot_rect, 2)
+            
+                if self.save_slots[i]:
+                    save = self.save_slots[i]
+                    info_text = f"{save['name']} - Level {save['level']} | {save['timestamp']}"
+                else:
+                    info_text = "Empty Slot!"
+            
+                text_surf = self.font.render(info_text, True, color)
+                self.screen.blit(text_surf, (220, slot_y + 35))
+                slot_y += 120
+
+            # Handle input
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_DOWN:
+                        selected_slot = (selected_slot + 1) % 3
+                    elif event.key == pygame.K_UP:
+                        selected_slot = (selected_slot - 1) % 3
+                    elif event.key == pygame.K_RETURN:
+                        if self.save_slots[selected_slot] is None:
+                            # Show name input for new saves
+                            self.get_save_name(selected_slot)
+                            return
+                        else:
+                            # Overwrite existing save
+                            self.get_save_name(selected_slot)
+                            return
+                    elif event.key == pygame.K_ESCAPE:
+                        return
+
+            pygame.display.flip()
+
     def draw_ui(self):
         lives_text = self.font.render(f"Lives: {self.player.lives}", True, self.WHITE)
         self.screen.blit(lives_text, (10, 10))
@@ -319,7 +414,6 @@ class Game:
             adjust_text = self.font.render(self.score_adjustment, True, self.RED if self.score_adjustment[0] == '-' else self.GREEN)
             self.screen.blit(adjust_text, (score_text.get_width() + 20, 40))
 
-
     def adjust_score(self, points):
         self.score = max(0, self.score + points)  # Ensure score is non-negative
     
@@ -330,7 +424,6 @@ class Game:
             # Clear existing timer and set a new one
             pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Clear existing timer
             pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Set new timer for 2 seconds
-
         
     def clear_bullets(self):
         """
@@ -497,103 +590,220 @@ class Game:
                     quit()
 
     def show_menu(self):
-        menu_options = ["Start", "Leaderboard", "Instructions", "Save Game", "Load Game", "Exit"]
+        menu_options = ["New Game", "Load Game", "Instructions", "Leaderboard", "Exit"]
         selected_option = 0
-
+    
         while True:
             self.screen.fill(self.BLACK)
             title_text = self.bold_font.render("Cyber Security Invaders", True, self.RED)
-            self.screen.blit(title_text, (self.screen_width // 2 - title_text.get_width() // 2, 50))
+            self.screen.blit(title_text, (self.screen_width//2 - title_text.get_width()//2, 50))
 
+            # Draw menu items
             for i, option in enumerate(menu_options):
+                y = 200 + i*80
                 color = self.GREEN if i == selected_option else self.WHITE
                 option_text = self.big_font.render(option, True, color)
-                self.screen.blit(option_text, (self.screen_width // 2 - option_text.get_width() // 2, 200 + i * 60))
-
+                self.screen.blit(option_text, (self.screen_width//2 - option_text.get_width()//2, y))
+        
             pygame.display.flip()
 
+            # Handle input
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    quit()
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_UP:
-                        selected_option = (selected_option - 1) % len(menu_options)
-                    elif event.key == pygame.K_DOWN:
+                    if event.key == pygame.K_DOWN:
                         selected_option = (selected_option + 1) % len(menu_options)
+                    elif event.key == pygame.K_UP:
+                        selected_option = (selected_option - 1) % len(menu_options)
                     elif event.key == pygame.K_RETURN:
-                        if menu_options[selected_option] == "Start":
+                        if menu_options[selected_option] == "Load Game":
+                            self.show_load_menu()
+                            if self.loaded_from_menu:
+                                self.loaded_from_menu = False
+                                return  # Start the loaded game
+                        elif menu_options[selected_option] == "New Game":
                             self.reset_game()
                             return
                         elif menu_options[selected_option] == "Leaderboard":
                             self.show_leaderboard()
                         elif menu_options[selected_option] == "Instructions":
                             self.show_instructions()
-                        elif menu_options[selected_option] == "Save Game":
-                            self.save_game()
-                        elif menu_options[selected_option] == "Load Game":
-                            if self.load_game():
-                                return  # Return if game loaded successfully
                         elif menu_options[selected_option] == "Exit":
                             pygame.quit()
                             quit()
                             
-    def save_game(self):
+    def show_load_menu(self):
+        selected_slot = 0
+        while True:
+            self.screen.fill(self.BLACK)
+            title = self.big_font.render("Load Game", True, self.YELLOW)
+            self.screen.blit(title, (self.screen_width//2 - title.get_width()//2, 50))
+        
+            # Draw slots with proper empty slot handling
+            slot_height = 100
+            start_y = 150
+            for i in range(3):
+                # Create slot_rect FIRST
+                slot_rect = pygame.Rect(
+                    200,  # x
+                    start_y + i*(slot_height + 20),  # y
+                    800,  # width
+                    slot_height  # height
+                )
+                color = self.GREEN if i == selected_slot else self.WHITE
+            
+                # Always draw the slot background
+                pygame.draw.rect(self.screen, color, slot_rect, 2)
+            
+                if self.save_slots[i]:
+                    # Draw save info for occupied slot
+                    save = self.save_slots[i]
+                    text_lines = [
+                        f"{save['name']}",
+                        f"Level: {save['level']} | Lives: {save['player']['lives']}",
+                        f"Score: {save['score']} | Saved: {save['timestamp']}"
+                    ]
+                    for j, line in enumerate(text_lines):
+                        text_surf = self.font.render(line, True, color)
+                        self.screen.blit(text_surf, (slot_rect.x + 20, slot_rect.y + 10 + j*30))
+                else:
+                    # Draw empty slot text
+                    empty_text = self.font.render("Empty Slot!", True, color)
+                    self.screen.blit(empty_text, (slot_rect.x + 20, slot_rect.y + 40))
+        
+            # Add return instruction
+            return_text = self.font.render("Press ESC to return to menu", True, self.WHITE)
+            self.screen.blit(return_text, (self.screen_width//2 - return_text.get_width()//2, 550))
+        
+            # Handle input
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_DOWN:
+                        selected_slot = (selected_slot + 1) % 3
+                    elif event.key == pygame.K_UP:
+                        selected_slot = (selected_slot - 1) % 3
+                    elif event.key == pygame.K_RETURN:
+                        if self.save_slots[selected_slot]:
+                            self.load_game(selected_slot)
+                            return
+                    elif event.key == pygame.K_ESCAPE:
+                        return
+        
+            pygame.display.flip()
+                            
+    def save_game(self, slot, name):
+        """Save current game state to specified slot"""
         game_state = {
+            'name': name,
             'level': self.level,
             'boss_fight': self.boss_fight,
-            'player_lives': self.player.lives,
-            'player_position': [self.player.x, self.player.y],
             'score': self.score,
-            'enemies': self.enemy_manager.enemies
+            'player': {
+                'lives': self.player.lives,
+                'x': self.player.x,
+                'y': self.player.y,
+                'invulnerable': self.player.invulnerable,
+                'invulnerable_time': time.time() - self.player.invulnerable_timer,
+            },
+            'enemies': self.enemy_manager.enemies,
+            'enemy_direction': self.enemy_manager.direction,
+            'boss_health': self.boss.health if self.boss_fight else None,
+            'power_ups': {
+                'active': self.power_ups.power_up_active,
+                'type': self.power_ups.current_power_up,
+                'timer': time.time() - self.power_ups.power_up_timer
+            },
+            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         }
-        with open('game_save.json', 'w') as save_file:
-            json.dump(game_state, save_file)
-        self.display_feedback("Game Saved!", self.GREEN)
+    
+        self.save_slots[slot] = game_state
+        with open('saves.json', 'w') as f:
+            json.dump(self.save_slots, f)
 
-    def load_game(self):
-        if not os.path.exists('game_save.json'):
-            self.display_feedback("No Save File Found!", self.RED)
+    def get_save_name(self, slot):
+        name = ""
+        while True:
+            self.screen.fill(self.BLACK)
+            prompt = self.font.render("Enter save name:", True, self.WHITE)
+            self.screen.blit(prompt, (200, 200))
+        
+            name_text = self.font.render(name, True, self.GREEN)
+            self.screen.blit(name_text, (200, 250))
+        
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        if name.strip():
+                            self.save_game(slot, name.strip())
+                            return
+                    elif event.key == pygame.K_BACKSPACE:
+                        name = name[:-1]
+                    else:
+                        if len(name) < 20 and event.unicode.isprintable():
+                            name += event.unicode
+        
+            pygame.display.flip()
+
+    def load_game(self, slot):
+        if not self.save_slots[slot]:
+            self.display_feedback("Empty Slot!", self.RED)
             return False
 
-        with open('game_save.json', 'r') as save_file:
-            game_state = json.load(save_file)
-        
-        self.level = game_state['level']
-        self.boss_fight = game_state['boss_fight']
-        self.player.lives = game_state['player_lives']
-        self.player.x, self.player.y = game_state['player_position']
-        self.score = game_state['score']
-        self.enemy_manager.enemies = game_state['enemies']
+        save_data = self.save_slots[slot]
+    
+        # Restore core state
+        self.level = save_data['level']
+        self.boss_fight = save_data['boss_fight']
+        self.score = save_data['score']
+    
+        # Restore player
+        self.player.lives = save_data['player']['lives']
+        self.player.x = save_data['player']['x']
+        self.player.y = save_data['player']['y']
+        self.player.invulnerable = save_data['player']['invulnerable']
+        self.player.invulnerable_timer = time.time() - save_data['player']['invulnerable_time']
+    
+        # Restore enemies
+        self.enemy_manager.enemies = save_data['enemies']
+        self.enemy_manager.direction = save_data['enemy_direction']
+    
+        # Restore boss
+        if self.boss_fight:
+            self.boss.health = save_data['boss_health']
+    
+        # Restore power-ups
+        self.power_ups.power_up_active = save_data['power_ups']['active']
+        self.power_ups.current_power_up = save_data['power_ups']['type']
+        self.power_ups.power_up_timer = time.time() - save_data['power_ups']['timer']
+    
         self.display_feedback("Game Loaded!", self.GREEN)
         return True
         
     def check_server_availability(self):
-        try:
-            response = requests.get("http://5269989.pythonanywhere.com/leaderboard", timeout=5)
-            return response.status_code == 200
-        except requests.RequestException:
-            return False
+            try:
+                response = requests.get("https://5269989.pythonanywhere.com/leaderboard", timeout=5)
+                return response.status_code == 200
+            except requests.RequestException:
+                return False   
         
     def create_loading_screen(self):
         self.screen.fill(self.BLACK)
         loading_text = self.big_font.render("Loading...", True, self.GREEN)
         self.screen.blit(loading_text, (self.screen_width // 2 - loading_text.get_width() // 2, self.screen_height // 2 - loading_text.get_height() // 2))
-        pygame.display.flip()
+        pygame.display.flip()   
         
     def show_leaderboard(self):
         self.create_loading_screen()  # Show loading screen
         try:
-            response = requests.get("http://5269989.pythonanywhere.com/leaderboard", timeout=5)
+            response = requests.get("https://5269989.pythonanywhere.com/leaderboard", timeout=5)
             if response.status_code == 200:
                 leaderboard_data = response.json()
                 self.screen.fill(self.BLACK)
                 leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
                 self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
-                
+        
                 smaller_font = pygame.font.SysFont("Arial", 22)
                 y_position = 100
-                
+        
                 for i, entry in enumerate(leaderboard_data):
                     player_text = smaller_font.render(f"{i+1}. {entry['player']} - {entry['score']} points", True, self.WHITE)
                     self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
@@ -604,7 +814,7 @@ class Game:
             self.screen.fill(self.BLACK)
             error_text = self.big_font.render(f"Error: Failed to connect to leaderboard server", True, self.RED)
             self.screen.blit(error_text, (self.screen_width // 2 - error_text.get_width() // 2, self.screen_height // 2 - error_text.get_height() // 2))
-        
+
         tip = "Press any key to go back!"
         tip_text = self.font.render(tip, True, self.GREEN)
         self.screen.blit(tip_text, (self.screen_width // 2 - tip_text.get_width() // 2, self.screen_height - 50))
@@ -621,7 +831,7 @@ class Game:
                 if event.type == pygame.KEYDOWN:
                     waiting = False
         self.show_menu()
-
+                 
     def clear_level(self):
         
         # Clear player bullets and deactivate power-ups
@@ -766,7 +976,7 @@ class Game:
         self.create_loading_screen()  # Show loading screen
         try:
             payload = {'player_name': name, 'score': score}
-            response = requests.post("http://5269989.pythonanywhere.com/submit_score", json=payload, timeout=5)
+            response = requests.post("https://5269989.pythonanywhere.com/submit_score", json=payload, timeout=5)
             if response.status_code != 200:
                 raise Exception(f"Failed to submit score. Status code: {response.status_code}")
             else:
