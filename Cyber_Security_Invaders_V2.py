@@ -4,6 +4,7 @@
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
 #Incorporate RFID Reader into game (Save states linked to RFID tag?)
+#After completing boss level you have option to continue in arcade for as many levels as you want
 #Few more powerups - Super Speed, Slowing down enemies etc...
 #Finish the boss fight - Add different boss abilities (Shooting Virus bullets, aiming at player etc...), possibly incorporate a minigame, 
 #Optimise the 7seg display to be brighter and faster (Only update changed numbers?)
