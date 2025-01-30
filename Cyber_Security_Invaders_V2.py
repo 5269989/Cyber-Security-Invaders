@@ -1,6 +1,6 @@
 ###CURRENT ISSUES
-#Game state saves inconsistent and seems to be able to be influenced and overwritten whilst other games go on or when other saves happen
-#Doesn't save questions and questions asked correctly 
+#When pausing the menu text is not formatted correctly
+#Game does not handle pausing correctly, currently pressing esc makes it unpause and repause instantly allowing for exploits
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
 #Incorporate RFID Reader into game (Save states linked to RFID tag?)
@@ -247,7 +247,7 @@ class Game:
                     quit()
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        self.paused = not self.paused
+                        self.paused = not self.paused  
                 elif event.type == pygame.USEREVENT + 1:
                     if hasattr(self, 'score_adjustment') and time.time() - self.score_adjustment_time >= 2:
                         del self.score_adjustment
@@ -316,21 +316,31 @@ class Game:
             self.clock.tick(60)
 
     def draw_pause_menu(self):
-        # Semi-transparent overlay
-        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))  # Dark semi-transparent overlay
-        self.screen.blit(overlay, (0, 0))
-
         menu_options = ["Resume", "Save Game", "Return to Menu"]
         selected_option = 0  # Track selected option
 
         while self.paused:
-            # Draw menu
-            self.screen.blit(overlay, (0, 0))  # Refresh overlay
-        
+            # Draw game background first
+            self.screen.fill(self.BLACK)
+            self.player.draw()
+            self.enemy_manager.draw()
+            self.bullet_manager.update_player_bullets()
+            self.bullet_manager.update_enemy_bullets()
+            self.draw_ui()
+
+            # Draw pause menu overlay
+            menu_background = pygame.Surface((400, 300))
+            menu_background.fill(self.BLACK)
+            pygame.draw.rect(menu_background, self.WHITE, menu_background.get_rect(), 2)
+            self.screen.blit(menu_background, (self.screen_width//2 - 200, 150))
+
+            # Add PAUSED text
+            paused_text = self.bold_font.render("PAUSED", True, self.WHITE)
+            self.screen.blit(paused_text, (self.screen_width//2 - paused_text.get_width()//2, 180))
+
             # Draw menu items
             for i, option in enumerate(menu_options):
-                y = 200 + i*80
+                y = 250 + i*60
                 color = self.GREEN if i == selected_option else self.WHITE
                 option_text = self.big_font.render(option, True, color)
                 self.screen.blit(option_text, (self.screen_width//2 - option_text.get_width()//2, y))
@@ -340,7 +350,10 @@ class Game:
             # Handle input
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_DOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.paused = False  # Exit pause menu on ESC
+                        return
+                    elif event.key == pygame.K_DOWN:
                         selected_option = (selected_option + 1) % len(menu_options)
                     elif event.key == pygame.K_UP:
                         selected_option = (selected_option - 1) % len(menu_options)
@@ -713,7 +726,20 @@ class Game:
                             
     def save_game(self, slot, name):
         """Save all essential game states and force an update to the saves.json file."""
-    
+        # Reload current saves from file to ensure we have the latest data
+        current_saves = []
+        if os.path.exists('saves.json'):
+            try:
+                with open('saves.json', 'r') as f:
+                    current_saves = json.load(f)
+                    # Ensure we have exactly 3 slots, fill with None if necessary
+                    current_saves = (current_saves + [None] * 3)[:3]
+            except (json.JSONDecodeError, FileNotFoundError):
+                current_saves = [None, None, None]
+        else:
+            current_saves = [None, None, None]
+
+        # Create the new game state
         game_state = {
             'name': name,
             'level': self.level,
@@ -721,8 +747,6 @@ class Game:
             'score': self.score,
             'questions_asked': self.questions_asked,
             'asked_questions': self.asked_questions,
-
-            # Player state
             'player': {
                 'lives': self.player.lives,
                 'x': self.player.x,
@@ -730,36 +754,35 @@ class Game:
                 'invulnerable': self.player.invulnerable,
                 'invulnerable_time': time.time() - self.player.invulnerable_timer,
             },
-
-            # Enemy & Boss state
-            'enemies': self.enemy_manager.enemies,  # **Save enemies exactly as they are**
+            'enemies': self.enemy_manager.enemies,
             'enemy_direction': self.enemy_manager.direction,
             'boss_health': self.boss.health if self.boss_fight else None,
-
-            # **Bullets**
             'player_bullets': [(b[0], b[1], b[2], b[3]) for b in self.bullet_manager.player_bullets],
             'enemy_bullets': [(b[0], b[1]) for b in self.bullet_manager.enemy_bullets],
             'boss_bullets': [(b[0], b[1]) for b in self.bullet_manager.boss_bullets],
-
-            # Power-ups
             'power_ups': {
                 'active': self.power_ups.power_up_active,
                 'type': self.power_ups.current_power_up,
-                'x': self.power_ups.power_ups[0][0] if self.power_ups.power_ups else None,
-                'y': self.power_ups.power_ups[0][1] if self.power_ups.power_ups else None,
-                'timer': time.time() - self.power_ups.power_up_timer
+                'positions': self.power_ups.power_ups.copy(),  # Save all power-up positions
+                'timer': self.power_ups.power_up_timer - time.time() if self.power_ups.power_up_active else 0,
+                'spawn_time': self.power_ups.spawn_time
             },
-
             'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            
         }
 
-    
-        self.save_slots[slot] = game_state
+        # Update the specific slot
+        current_saves[slot] = game_state
+
+        # Write back all slots to the file
         try:
             with open('saves.json', 'w') as f:
-                json.dump(self.save_slots, f)
+                json.dump(current_saves, f)
+            # Update in-memory save slots to reflect the latest changes
+            self.save_slots = current_saves
             self.display_feedback("Game Saved!", self.GREEN)
-        except IOError:
+        except IOError as e:
+            print(f"Error saving game: {e}")
             self.display_feedback("Error saving game!", self.RED)
 
     def get_save_name(self, slot):
@@ -845,9 +868,12 @@ class Game:
         power_up_data = save_data['power_ups']
         self.power_ups.power_up_active = power_up_data['active']
         self.power_ups.current_power_up = power_up_data['type']
-        self.power_ups.power_up_timer = time.time() - power_up_data['timer']
-        if power_up_data['x'] is not None and power_up_data['y'] is not None:
-            self.power_ups.power_ups = [[power_up_data['x'], power_up_data['y']]]
+        self.power_ups.power_ups = power_up_data['positions']
+        self.power_ups.spawn_time = power_up_data['spawn_time']
+
+        if power_up_data['active']:
+            # Calculate remaining time when paused
+            self.power_ups.power_up_timer = time.time() + power_up_data['timer']
 
         self.display_feedback("Game Loaded!", self.GREEN)
 
@@ -866,12 +892,14 @@ class Game:
         if os.path.exists('saves.json'):
             try:
                 with open('saves.json', 'r') as f:
-                    self.save_slots = json.load(f)
+                    loaded_saves = json.load(f)
+                    # Ensure exactly 3 slots, filling with None if necessary
+                    self.save_slots = (loaded_saves + [None] * 3)[:3]
             except (json.JSONDecodeError, FileNotFoundError):
-                self.save_slots = [None, None, None]  # Reset if file is corrupted
+                self.save_slots = [None, None, None]
         else:
-            self.save_slots = [None, None, None]  
-
+            self.save_slots = [None, None, None]
+            
     def create_loading_screen(self):
         self.screen.fill(self.BLACK)
         loading_text = self.big_font.render("Loading...", True, self.GREEN)
@@ -1257,9 +1285,8 @@ class Boss:
                 self.health -= 1
                 if self.health <= 0:
                     self.game.display_feedback("Boss Defeated!", self.game.GREEN)
-                    self.game.end_game_screen()  # Changed to show end game screen for score input
                     self.power_ups.reset_power_up()
-                    self.game.reset_game()
+                    self.game.end_game_screen()  # Transition to end game screen without resetting here
 
 class EnemyManager:
     def __init__(self, game):
@@ -1466,8 +1493,19 @@ class PowerUpManager:
         self.is_first_level = True  # New flag for first level
 
     def update(self):
+        
+        def update(self):
+            if self.game.paused:  # Don't update timers while paused
+                return
+
         current_time = time.time()
         
+        # Only update spawn time if not paused
+        if not self.game.paused and not self.power_up_active:
+            if not self.power_ups and current_time - self.spawn_time >= self.spawn_interval:
+                self.spawn_power_up()
+                self.spawn_time = current_time
+
         # Handling for the first level
         if self.is_first_level:
             if not self.power_ups:
