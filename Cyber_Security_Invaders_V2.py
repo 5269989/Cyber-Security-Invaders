@@ -1,6 +1,5 @@
 ###CURRENT ISSUES
-#When pausing the menu text is not formatted correctly
-#Game does not handle pausing correctly, currently pressing esc makes it unpause and repause instantly allowing for exploits
+
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
 #Incorporate RFID Reader into game (Save states linked to RFID tag?)
@@ -231,9 +230,13 @@ class Game:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
-        with self.lock:
-            self.score = max(0, self.score + points)  # Update game score safely
-        self.display_update_event.set()
+        self.score = max(0, self.score + points)  # Ensure score is non-negative
+        if points != 0:
+            self.score_adjustment = f"{points:+d}"  # Store the adjustment for display
+            self.score_adjustment_time = time.time()
+            # Clear existing timer and set a new one
+            pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Clear existing timer
+            pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Set new timer for 2 seconds
 
     def main_game_loop(self):
         self.start_time = time.time()
@@ -248,32 +251,26 @@ class Game:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         self.paused = not self.paused  
-                elif event.type == pygame.USEREVENT + 1:
+                if event.type == pygame.USEREVENT + 1:
                     if hasattr(self, 'score_adjustment') and time.time() - self.score_adjustment_time >= 2:
                         del self.score_adjustment
-                        
-            if self.paused:
-                self.draw_pause_menu() 
-                continue
+                if self.paused:
+                    self.draw_pause_menu() 
+                    continue
 
             keys = pygame.key.get_pressed()
             self.player.move(keys)
             self.player.shoot(keys)
-
             current_time = time.time()
             elapsed_time = current_time - last_score_update_time
-    
             if not score_paused:
                 if elapsed_time >= 1:  # Update score every second
                     self.score -= 25  # Deduct 25 points per second
                     self.score = max(0, self.score)  # Ensure score doesn't go below 0
                     last_score_update_time = current_time  # Reset for next frame
-
             if keys[pygame.K_ESCAPE]:
                 self.paused = not self.paused
-
             self.player.check_invulnerability()
-
             if self.boss_fight:
                 player_hit = self.boss.update()
                 self.boss.check_hit_by_player()
@@ -282,9 +279,13 @@ class Game:
                     if not self.ask_cybersecurity_question():
                         self.player.lives -= 1
                         self.adjust_score(-250)
+                        score_paused = False
                         if self.player.lives == 0:
                             self.game_over_screen()
-                    score_paused = False
+                            score_paused = False
+                    else:
+                        score_paused = False
+
             else:
                 self.enemy_manager.update()
                 self.enemy_manager.draw()
@@ -296,57 +297,61 @@ class Game:
                     if not self.ask_cybersecurity_question():
                         self.player.lives -= 1
                         self.adjust_score(-250)
+                        score_paused = False
                         if self.player.lives == 0:
                             self.game_over_screen()
-                    score_paused = False
-
+                            score_paused = False
+                    else:
+                        score_paused = False
             self.player.draw()
             self.bullet_manager.update_player_bullets()
             self.bullet_manager.update_enemy_bullets()
             self.draw_ui()
-            
             # Handle 7-segment display
             if is_raspberry_pi:
                 if self.score != self.display_score:  # If score has changed
                     with self.lock:
                         self.display_score = self.score
-                self.display_update_event.set()
-
+                        self.display_update_event.set()
             pygame.display.update()
             self.clock.tick(60)
 
     def draw_pause_menu(self):
         menu_options = ["Resume", "Save Game", "Return to Menu"]
         selected_option = 0  # Track selected option
-
         while self.paused:
             # Draw game background first
             self.screen.fill(self.BLACK)
+        
+            # Draw player, enemies, bullets, and power-ups
             self.player.draw()
             self.enemy_manager.draw()
-            self.bullet_manager.update_player_bullets()
-            self.bullet_manager.update_enemy_bullets()
-            self.draw_ui()
+            self.bullet_manager.update_player_bullets(draw_only=True)
+            self.bullet_manager.update_enemy_bullets(draw_only=True)
 
+             # *** Manually draw power-ups without updating them ***
+            for power_up in self.power_ups.power_ups:
+                pygame.draw.circle(self.screen, self.BLUE, (int(power_up[0]), int(power_up[1])), 10)
+        
             # Draw pause menu overlay
             menu_background = pygame.Surface((400, 300))
             menu_background.fill(self.BLACK)
             pygame.draw.rect(menu_background, self.WHITE, menu_background.get_rect(), 2)
             self.screen.blit(menu_background, (self.screen_width//2 - 200, 150))
-
+        
             # Add PAUSED text
             paused_text = self.bold_font.render("PAUSED", True, self.WHITE)
-            self.screen.blit(paused_text, (self.screen_width//2 - paused_text.get_width()//2, 180))
-
+            self.screen.blit(paused_text, (self.screen_width//2 - paused_text.get_width()//2, 155))
+        
             # Draw menu items
             for i, option in enumerate(menu_options):
                 y = 250 + i*60
                 color = self.GREEN if i == selected_option else self.WHITE
                 option_text = self.big_font.render(option, True, color)
                 self.screen.blit(option_text, (self.screen_width//2 - option_text.get_width()//2, y))
-
+        
             pygame.display.flip()
-
+        
             # Handle input
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
@@ -732,8 +737,8 @@ class Game:
             try:
                 with open('saves.json', 'r') as f:
                     current_saves = json.load(f)
-                    # Ensure we have exactly 3 slots, fill with None if necessary
-                    current_saves = (current_saves + [None] * 3)[:3]
+                # Ensure we have exactly 3 slots, fill with None if necessary
+                current_saves = (current_saves + [None] * 3)[:3]
             except (json.JSONDecodeError, FileNotFoundError):
                 current_saves = [None, None, None]
         else:
@@ -768,7 +773,6 @@ class Game:
                 'spawn_time': self.power_ups.spawn_time
             },
             'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            
         }
 
         # Update the specific slot
@@ -811,21 +815,19 @@ class Game:
 
     def load_game(self, slot):
         """Forces the game to reload exactly what is in saves.json to ensure consistency."""
-    
-        # **🚨 Read the latest save file before loading**
         if os.path.exists('saves.json'):
             try:
                 with open('saves.json', 'r') as f:
                     self.save_slots = json.load(f)  # Reload the entire save structure
-            except (json.JSONDecodeError, FileNotFoundError):
-                self.display_feedback("Error reading save file!", self.RED)
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                self.display_feedback(f"Error reading save file: {e}", self.RED)
                 return False
         else:
             self.display_feedback("No save file found!", self.RED)
             return False
 
-        # **Ensure selected save slot exists**
-        if not self.save_slots[slot]:
+        # **Ensure selected save slot exists and is not empty**
+        if not self.save_slots or not self.save_slots[slot]:
             self.display_feedback("Empty Slot!", self.RED)
             return False
 
@@ -851,7 +853,6 @@ class Game:
         # Restore enemies exactly as saved
         self.enemy_manager.enemies = save_data['enemies'] if save_data['enemies'] else []
         self.enemy_manager.direction = save_data['enemy_direction']
-
         if not self.enemy_manager.enemies:
             self.enemy_manager.create_enemies()  # **Only recreate enemies if missing from save**
 
@@ -870,13 +871,11 @@ class Game:
         self.power_ups.current_power_up = power_up_data['type']
         self.power_ups.power_ups = power_up_data['positions']
         self.power_ups.spawn_time = power_up_data['spawn_time']
-
         if power_up_data['active']:
             # Calculate remaining time when paused
             self.power_ups.power_up_timer = time.time() + power_up_data['timer']
 
         self.display_feedback("Game Loaded!", self.GREEN)
-
         self.paused = False
         self.main_game_loop()
         
@@ -1021,62 +1020,49 @@ class Game:
         self.player.y = self.screen_height - self.player.height - 10
         self.player.invulnerable = False
         self.player.invulnerable_timer = 0
-
         self.level = 1
         self.boss_fight = False
         self.score = 5000
         self.questions_asked = 0
         self.asked_questions = []
-
         self.enemy_manager.create_enemies()
         self.boss.health = self.boss.max_health
-
         # **Reset Bullets**
         self.bullet_manager.player_bullets = []
         self.bullet_manager.enemy_bullets = []
         self.bullet_manager.boss_bullets = []
-
         # **Reset Power-ups**
         self.power_ups.power_up_active = False
         self.power_ups.current_power_up = None
         self.power_ups.power_ups = []
         self.power_ups.spawn_time = time.time()
-
         # **Ensure game does NOT start paused**
         self.paused = False
-
         self.main_game_loop()
                
     def reset_game_state(self):
-
         """Fully resets the game state to avoid cross-over issues when loading a save."""
-    
         # **Clear Bullets**
         self.bullet_manager.player_bullets.clear()
         self.bullet_manager.enemy_bullets.clear()
         self.bullet_manager.boss_bullets.clear()
-
         # **Clear Enemies**
         self.enemy_manager.enemies.clear()
-
         # **Clear Power-Ups**
         self.power_ups.power_ups.clear()
         self.power_ups.power_up_active = False
         self.power_ups.current_power_up = None
         self.power_ups.spawn_time = time.time()
-
         # **Reset Score & Level**
         self.level = 1
         self.boss_fight = False
         self.questions_asked = 0
         self.asked_questions.clear()
         self.score = 5000
-
         # **Reset Player**
         self.player.lives = 3
         self.player.invulnerable = False
         self.player.invulnerable_timer = 0
-
         # **Ensure UI and timers are reset**
         pygame.time.set_timer(pygame.USEREVENT + 1, 0)
         if hasattr(self, 'score_adjustment'):
@@ -1286,7 +1272,7 @@ class Boss:
                 if self.health <= 0:
                     self.game.display_feedback("Boss Defeated!", self.game.GREEN)
                     self.power_ups.reset_power_up()
-                    self.game.end_game_screen()  # Transition to end game screen without resetting here
+                    self.game.end_game_screen()  
 
 class EnemyManager:
     def __init__(self, game):
@@ -1375,14 +1361,13 @@ class BulletManager:
         if self.triple_shot:
             # Middle bullet (straight ahead)
             self.player_bullets.append([x, y, self.player_bullet_height, 0])  # angle 0 means straight up
-            
             # Left bullet (20 degrees to the left)
             self.player_bullets.append([x - 10, y, self.player_bullet_height, -self.angle])  
-            
             # Right bullet (20 degrees to the right)
             self.player_bullets.append([x + 10, y, self.player_bullet_height, self.angle])
         else:
             self.player_bullets.append([x, y, self.player_bullet_height, 0])  # Single shot straight up
+
 
     def add_enemy_bullet(self, x, y):
         self.enemy_bullets.append([x, y])
@@ -1390,19 +1375,18 @@ class BulletManager:
     def add_boss_bullet(self, x, y):
         self.boss_bullets.append([x, y])
 
-    def update_player_bullets(self):
+    def update_player_bullets(self, draw_only=False):
         bullets_to_remove = []
         for bullet in self.player_bullets[:]:
             x, y, height, angle = bullet
-            
             # Move bullet based on its angle
-            if angle == 0:  # Straight up
+            if not draw_only and angle == 0:  # Straight up
                 bullet[1] -= self.player_bullet_speed
-            else:
+            elif not draw_only:
                 # Calculate movement based on angle
                 bullet[0] += self.player_bullet_speed * math.sin(angle)  # Horizontal movement
                 bullet[1] -= self.player_bullet_speed * math.cos(angle)  # Vertical movement
-
+            
             # Calculate points for drawing a rotated rectangle
             # Here we're using the bullet's height as its length in the direction of travel
             rect_points = [
@@ -1411,14 +1395,12 @@ class BulletManager:
                 (x + self.bullet_width * math.cos(angle) + height * math.sin(angle), y + self.bullet_width * math.sin(angle) - height * math.cos(angle)),
                 (x + self.bullet_width * math.cos(angle), y + self.bullet_width * math.sin(angle))
             ]
-
             # Draw the rotated rectangle
             pygame.draw.polygon(self.game.screen, self.game.GREEN, rect_points)
-
+            
             # Check for conditions to remove bullet
-            if bullet[1] < 0 or bullet[0] < 0 or bullet[0] > self.game.screen_width:
+            if not draw_only and (bullet[1] < 0 or bullet[0] < 0 or bullet[0] > self.game.screen_width):
                 bullets_to_remove.append(bullet)
-        
             # Check for enemy collision
             for enemy in self.game.enemy_manager.enemies[:]:
                 if (enemy[0] < x < enemy[0] + 40 and enemy[1] < y < enemy[1] + 40) or \
@@ -1426,30 +1408,28 @@ class BulletManager:
                     bullets_to_remove.append(bullet)
                     self.game.enemy_manager.enemies.remove(enemy)
                     break
+            # Remove all bullets marked for deletion
+            for bullet in bullets_to_remove:
+                if bullet in self.player_bullets:  # Double check if the bullet is still in the list
+                    self.player_bullets.remove(bullet)
 
-        # Remove all bullets marked for deletion
-        for bullet in bullets_to_remove:
-            if bullet in self.player_bullets:  # Double check if the bullet is still in the list
-                self.player_bullets.remove(bullet)
-
-    def update_enemy_bullets(self):
+    def update_enemy_bullets(self, draw_only=False):
         for bullet in self.enemy_bullets[:]:
-            bullet[1] += self.enemy_bullet_speed
+            if not draw_only:
+                bullet[1] += self.enemy_bullet_speed
             pygame.draw.rect(self.game.screen, self.game.RED, (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
-            if bullet[1] > self.game.screen_height:
+            if not draw_only and bullet[1] > self.game.screen_height:
                 self.enemy_bullets.remove(bullet)
-                
             if self.game.player.invulnerable and \
-                   self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
-                   self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
-                    self.enemy_bullets.remove(bullet)  # Bullet is removed if it hits the shield
-
+               self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
+               self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
+                self.enemy_bullets.remove(bullet)  # Bullet is removed if it hits the shield
         for bullet in self.boss_bullets[:]:
-            bullet[1] += self.enemy_bullet_speed * 2  # Boss bullets are faster
+            if not draw_only:
+                bullet[1] += self.enemy_bullet_speed * 2  # Boss bullets are faster
             pygame.draw.rect(self.game.screen, self.game.YELLOW, (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
-            if bullet[1] > self.game.screen_height:
+            if not draw_only and bullet[1] > self.game.screen_height:
                 self.boss_bullets.remove(bullet)
-                
             # Check if boss bullet hits the player's shield
             if self.game.player.invulnerable and \
                self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
@@ -1491,40 +1471,32 @@ class PowerUpManager:
         self.current_power_up = None
         self.last_level_check = 1
         self.is_first_level = True  # New flag for first level
-
+        
     def update(self):
-        
-        def update(self):
-            if self.game.paused:  # Don't update timers while paused
-                return
-
+        if self.game.paused:  # Don't update timers while paused
+            return
         current_time = time.time()
-        
         # Only update spawn time if not paused
         if not self.game.paused and not self.power_up_active:
             if not self.power_ups and current_time - self.spawn_time >= self.spawn_interval:
                 self.spawn_power_up()
                 self.spawn_time = current_time
-
         # Handling for the first level
         if self.is_first_level:
             if not self.power_ups:
                 self.spawn_power_up()
                 self.is_first_level = False
-        
         # Check if a new level has started (excluding first level)
         elif self.game.level != self.last_level_check:
             self.power_ups.clear()  # Clear old power-ups
             self.spawn_power_up()  # Spawn new power-up
             self.spawn_time = current_time  # Reset the timer
             self.last_level_check = self.game.level  # Update the last checked level
-
         # Normal spawn conditions for non-boss levels when no power-up is active
         if not self.game.boss_fight and not self.power_up_active:
             if not self.power_ups and current_time - self.spawn_time >= self.spawn_interval:
                 self.spawn_power_up()
                 self.spawn_time = current_time
-
         # Update existing power-up
         if self.power_ups:
             power_up = self.power_ups[0]
@@ -1539,7 +1511,6 @@ class PowerUpManager:
                 self.game.player.y < power_up[1] < self.game.player.y + self.game.player.height):
                 self.power_ups.clear()
                 self.apply_power_up()
-
         # Deactivate power-up after duration
         if self.power_up_active:
             if current_time - self.power_up_timer > 5:  # Duration of power-up
@@ -1554,10 +1525,8 @@ class PowerUpManager:
     def apply_power_up(self):
         self.power_up_active = True
         self.power_up_timer = time.time()
-        
         power_up_types = ['Laser', 'Shield', 'TripleShot']
         self.current_power_up = random.choice(power_up_types)
-        
         if self.current_power_up == 'Laser':
             self.game.bullet_manager.player_bullet_height = 30
             self.game.bullet_manager.player_bullet_speed = 35
@@ -1566,7 +1535,6 @@ class PowerUpManager:
             self.game.player.set_invulnerable()  # Changed from directly setting invulnerable to using a method
         elif self.current_power_up == 'TripleShot':
             self.game.bullet_manager.triple_shot = True
-
         self.game.adjust_score(250)  
         self.game.power_up_sound.play()
 
@@ -1578,7 +1546,6 @@ class PowerUpManager:
         self.current_power_up = None
         self.power_ups.clear()
         self.spawn_time = time.time()  # Reset the spawn timer
-
         # Reset specific power-up effects
         self.game.bullet_manager.player_bullet_height = 10  # Default bullet height
         self.game.bullet_manager.player_bullet_speed = 7    # Default bullet speed
