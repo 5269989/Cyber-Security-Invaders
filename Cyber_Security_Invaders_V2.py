@@ -1,8 +1,9 @@
 ###CURRENT ISSUES
-
+#Boss and healthbar don't render when paused 
+#Error when defeating boss  AttributeError: 'Boss' object has no attribute 'power_ups'
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
-#Incorporate RFID Reader into game (Save states linked to RFID tag?)
+#Incorporate RFID Reader into game tags activate cheat modes (e.g., infinite ammo or invincibility)
 #After completing boss level you have option to continue in arcade for as many levels as you want
 #Few more powerups - Super Speed, Slowing down enemies etc...
 #Finish the boss fight - Add different boss abilities (Shooting Virus bullets, aiming at player etc...), possibly incorporate a minigame, 
@@ -129,6 +130,7 @@ class Game:
         self.selected_save_slot = 0
         self.loaded_from_menu = False
         self.save_name_input = ""
+        self.current_music = None  # Track currently playing music
         self.save_slots = [None, None, None]  # Default empty save slots
         self.load_saves_from_file()  # Load saves when game starts
         
@@ -182,25 +184,70 @@ class Game:
              "answer": "A"}
         ]
 
+        
+ 
         # Sounds
         self.load_sounds()
+        
+        self.load_menu_background()
         
         if is_raspberry_pi:
             self.start_display_thread()
 
     def load_sounds(self):
-        self.shoot_sound = pygame.mixer.Sound(os.path.join("sounds", "shoot.wav"))
-        self.hit_sound = pygame.mixer.Sound(os.path.join("sounds", "hit.wav"))
-        self.correct_answer_sound = pygame.mixer.Sound(os.path.join("sounds", "correct.wav"))
-        self.wrong_answer_sound = pygame.mixer.Sound(os.path.join("sounds", "wrong.wav"))
-        self.level_up_sound = pygame.mixer.Sound(os.path.join("sounds", "level_up.wav"))
-        self.power_up_sound = pygame.mixer.Sound(os.path.join("sounds", "power_up.wav"))
+        """Loads game sound effects and background music safely."""
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get script directory
+    
+        #Music Paths (Using os.path.join for cross-platform compatibility)
+        self.menu_music = os.path.join(BASE_DIR, "sounds", "background_music", "menu_music.wav")
+        self.level_music = os.path.join(BASE_DIR, "sounds", "background_music", "level_music.wav")
+        self.boss_music = os.path.join(BASE_DIR, "sounds", "background_music", "boss_music.wav")
+        self.game_over_music = os.path.join(BASE_DIR, "sounds", "background_music", "game_over.wav")
+
+        #Check if music files exist before loading them
+        for music_file in [self.menu_music, self.level_music, self.boss_music, self.game_over_music]:
+            if not os.path.exists(music_file):
+                print(f"🚨 Warning: Music file missing -> {music_file}")  # Debugging info
+
+        #Sound Effect Paths
+        self.shoot_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "shoot.wav"))
+        self.hit_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "hit.wav"))
+        self.correct_answer_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "correct.wav"))
+        self.wrong_answer_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "wrong.wav"))
+        self.level_up_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "level_up.wav"))
+        self.power_up_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "power_up.wav"))
+
+        #Set volume (adjust as needed)
+        pygame.mixer.music.set_volume(0.8)
+
+    def load_menu_background(self):
+        # Load animated menu backgrounds
+        self.menu_backgrounds = [
+            pygame.image.load("assets/menu_background1.png"),
+            pygame.image.load("assets/menu_background2.png"),
+            pygame.image.load("assets/menu_background3.png")
+        ]
+        self.menu_background_index = 0  # Start with the first background
+        self.last_bg_update = time.time()  # Track time for animation
+        self.bg_animation_interval = 1  # Change background every 0.2 seconds
 
     def start_display_thread(self):
         self.display_thread = threading.Thread(target=self.update_7seg_display)
         self.display_thread.daemon = True
         self.display_thread.start()
     
+    def change_music(self, new_track):
+        """Stops current music and plays a new track safely."""
+        if not os.path.exists(new_track):  # Check if file exists
+            print(f"Music file not found: {new_track}")  # Debugging info
+            return  # Exit function to prevent crash
+
+        if self.current_music != new_track:  # Avoid restarting the same track
+            pygame.mixer.music.stop()
+            pygame.mixer.music.load(new_track)
+            pygame.mixer.music.play(-1)  # Loop indefinitely
+            self.current_music = new_track  # Track current music
+
     def update_7seg_display(self):
         while True:
             self.display_update_event.wait()  # Wait for an update event
@@ -239,6 +286,7 @@ class Game:
             pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Set new timer for 2 seconds
 
     def main_game_loop(self):
+        self.change_music(self.level_music)  # Start level music
         self.start_time = time.time()
         last_score_update_time = self.start_time
         score_paused = False
@@ -587,6 +635,7 @@ class Game:
             GPIO.output(RED_LED_PIN, GPIO.LOW)
 
     def boss_fight_splash_screen(self):
+        self.change_music(self.boss_music)  # Start boss music
         # Clear player bullets and deactivate power-ups
         self.clear_bullets()
         self.power_ups.reset_power_up()
@@ -600,6 +649,7 @@ class Game:
         self.wait_for_keypress()
 
     def game_over_screen(self):
+        self.change_music(self.game_over_music)  # Play Game Over music
         self.screen.fill(self.RED)
         game_over_text = self.bold_font.render("GAME OVER!", True, self.WHITE)
         self.screen.blit(game_over_text, (self.screen_width // 2 - game_over_text.get_width() // 2, self.screen_height // 2 - 100))
@@ -635,18 +685,30 @@ class Game:
         selected_option = 0
         self.loaded_from_menu = False   
 
+        self.change_music(self.menu_music)  # Play menu music
+
         while True:
-            self.screen.fill(self.BLACK)
+            current_time = time.time()
+        
+            #Animate the background every 0.2 seconds**
+            if current_time - self.last_bg_update >= self.bg_animation_interval:
+                self.menu_background_index = (self.menu_background_index + 1) % len(self.menu_backgrounds)
+                self.last_bg_update = current_time
+        
+            #Draw the animated background
+            self.screen.blit(self.menu_backgrounds[self.menu_background_index], (0, 0))
+
+            # Title text
             title_text = self.bold_font.render("Cyber Security Invaders", True, self.RED)
             self.screen.blit(title_text, (self.screen_width//2 - title_text.get_width()//2, 50))
 
             # Draw menu items
             for i, option in enumerate(menu_options):
-                y = 200 + i*80
+                y = 200 + i * 80
                 color = self.GREEN if i == selected_option else self.WHITE
                 option_text = self.big_font.render(option, True, color)
                 self.screen.blit(option_text, (self.screen_width//2 - option_text.get_width()//2, y))
-        
+
             pygame.display.flip()
 
             # Handle input
@@ -1144,7 +1206,6 @@ class Player:
         self.invulnerable_duration = 5  # Duration in seconds for invulnerability
         self.shield_outline = self.create_shield_outline()
 
-
     def load_and_scale_image(self, filename, size):
         try:
             return pygame.transform.scale(pygame.image.load(os.path.join("assets", filename)).convert_alpha(), size)
@@ -1368,7 +1429,6 @@ class BulletManager:
         else:
             self.player_bullets.append([x, y, self.player_bullet_height, 0])  # Single shot straight up
 
-
     def add_enemy_bullet(self, x, y):
         self.enemy_bullets.append([x, y])
 
@@ -1435,7 +1495,6 @@ class BulletManager:
                self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
                self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
                 self.boss_bullets.remove(bullet)  # Bullet is removed if it hits the shield
-        
 
     def check_player_hit(self):
         for bullet in self.enemy_bullets[:]:
