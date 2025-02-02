@@ -142,6 +142,10 @@ class Game:
             self.start_display_thread()    
             self.display_running = True 
             self.display_score_lock = threading.Lock()  
+            self.display_score_front = 5000  # What's shown on display
+            self.display_score_back = 5000   # What's being updated
+            self.display_update_flag = False
+            self.display_running = True
             
         # Colors
         self.BLACK = (0, 0, 0)
@@ -254,25 +258,27 @@ class Game:
     def update_7seg_display(self):
         digit_pins = [D1, D2, D3, D4]
         try:
-            frame_time = 1/60  # 60Hz refresh rate
-            digit_on_time = 0.0015  # 1.5ms per digit
+            digit_duration = 0.002  # 2ms per digit
+            refresh_rate = 0.001    # 1ms between refreshes
         
             while self.display_running:
-                frame_start = time.perf_counter()
+                # Atomic score swap
+                if self.display_update_flag:
+                    with self.display_score_lock:
+                        self.display_score_front = self.display_score_back
+                        self.display_update_flag = False
             
-                with self.display_score_lock:
-                    current_score = self.display_score
-                digits = str(current_score).zfill(4)
-
+                digits = str(self.display_score_front).zfill(4)
+            
                 for i in range(4):
-                    # Turn off all digits and segments first
+                    start_time = time.perf_counter()
+                
+                    # Clear all segments and digits first
                     GPIO.output(digit_pins + [SEGMENT_A, SEGMENT_B, SEGMENT_C,
                               SEGMENT_D, SEGMENT_E, SEGMENT_F, SEGMENT_G], GPIO.LOW)
                 
-                    # Get segment data
+                    # Set segments for current digit
                     segments = digit_to_segments[digits[i]]
-                
-                    # Set segments
                     GPIO.output(SEGMENT_A, segments[0])
                     GPIO.output(SEGMENT_B, segments[1])
                     GPIO.output(SEGMENT_C, segments[2])
@@ -284,16 +290,14 @@ class Game:
                     # Enable current digit
                     GPIO.output(digit_pins[i], GPIO.HIGH)
                 
-                    # Hold for precise timing
-                    time.sleep(digit_on_time)
+                    # Precise timing control
+                    elapsed = time.perf_counter() - start_time
+                    if elapsed < digit_duration:
+                        time.sleep(digit_duration - elapsed)
                 
                     # Disable digit
                     GPIO.output(digit_pins[i], GPIO.LOW)
-
-                # Maintain consistent frame rate
-                elapsed = time.perf_counter() - frame_start
-                if elapsed < frame_time:
-                    time.sleep(frame_time - elapsed)
+                    time.sleep(refresh_rate)
                 
         except KeyboardInterrupt:
             GPIO.cleanup()
@@ -319,17 +323,18 @@ class Game:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
-        # Only update if score actually changes
         with self.display_score_lock:
             new_score = max(0, self.score + points)
             if new_score != self.score:
                 self.score = new_score
-                self.display_score = new_score
+                self.display_score_back = new_score
+                self.display_update_flag = True
             
     def __del__(self):
         if is_raspberry_pi:
             self.display_running = False
-            self.display_thread.join()
+            if self.display_thread.is_alive():
+                self.display_thread.join()
             GPIO.cleanup()
 
     def main_game_loop(self):
