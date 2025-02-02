@@ -1,6 +1,6 @@
 ###CURRENT ISSUES
 #Boss and healthbar don't render when paused 
-#Error when defeating boss  AttributeError: 'Boss' object has no attribute 'power_ups'
+
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
 #Incorporate RFID Reader into game tags activate cheat modes (e.g., infinite ammo or invincibility)
@@ -203,6 +203,7 @@ class Game:
         self.level_music = os.path.join(BASE_DIR, "sounds", "background_music", "level_music.wav")
         self.boss_music = os.path.join(BASE_DIR, "sounds", "background_music", "boss_music.wav")
         self.game_over_music = os.path.join(BASE_DIR, "sounds", "background_music", "game_over.wav")
+        self.boss_defeated_music = os.path.join(BASE_DIR, "sounds", "background_music", "boss_defeated.wav")
 
         #Check if music files exist before loading them
         for music_file in [self.menu_music, self.level_music, self.boss_music, self.game_over_music]:
@@ -491,6 +492,8 @@ class Game:
                 color = self.RED
             elif self.power_ups.current_power_up == 'Shield':
                 color = self.LIGHTBLUE
+            elif self.power_ups.current_power_up == 'TripleShot':
+                color = self.GREEN
             elif self.power_ups.current_power_up == 'Score Multiplier':
                 color = self.GREEN
             else:
@@ -639,6 +642,7 @@ class Game:
         # Clear player bullets and deactivate power-ups
         self.clear_bullets()
         self.power_ups.reset_power_up()
+        self.boss.health = self.boss.max_health
         
         self.screen.fill(self.BLACK)
         boss_fight_text = self.bold_font.render("Boss Fight!", True, self.RED)
@@ -1134,7 +1138,7 @@ class Game:
         self.screen.fill(self.BLACK)
     
         # Game Over Text
-        end_text = self.bold_font.render(f"Game Over! Your Score is: {self.score}", True, self.YELLOW)
+        end_text = self.bold_font.render(f"YOU WIN! Your Score is: {self.score}", True, self.GREEN)
         self.screen.blit(end_text, (self.screen_width // 2 - end_text.get_width() // 2, self.screen_height // 3 - end_text.get_height() // 2))
     
         # Name Prompt
@@ -1331,9 +1335,10 @@ class Boss:
                 self.game.bullet_manager.player_bullets.remove(bullet)
                 self.health -= 1
                 if self.health <= 0:
+                    self.game.change_music(self.game.boss_defeated_music)  # Correct music reference
                     self.game.display_feedback("Boss Defeated!", self.game.GREEN)
-                    self.power_ups.reset_power_up()
-                    self.game.end_game_screen()  
+                    self.game.power_ups.reset_power_up()  
+                    self.game.end_game_screen()
 
 class EnemyManager:
     def __init__(self, game):
@@ -1529,7 +1534,7 @@ class PowerUpManager:
         self.power_up_timer = 0
         self.current_power_up = None
         self.last_level_check = 1
-        self.is_first_level = True  # New flag for first level
+        self.is_first_level = True  
         
     def update(self):
         if self.game.paused:  # Don't update timers while paused
@@ -1610,7 +1615,7 @@ class PowerUpManager:
         self.game.bullet_manager.player_bullet_speed = 7    # Default bullet speed
         self.game.bullet_manager.player_shoot_interval = 0.2  # Default shoot interval
         self.game.bullet_manager.triple_shot = False  # Disable TripleShot
-        self.game.player.invulnerable = False  # Disable Shield
+        self.game.player.invulnerable = False  
 
 
 def main():
