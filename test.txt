@@ -45,13 +45,7 @@ if is_raspberry_pi:
     SEGMENT_E = 22
     SEGMENT_D = 23
     SEGMENT_C = 24
-    SEGMENT_G = 27
-
-    self.changed_segments = set()
-    self.lock = threading.Lock()
-    self.display_score = 5000
-    self.display_thread = None
-    self.start_display_thread()     
+    SEGMENT_G = 27 
 
     GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
     pins = [SEGMENT_A, SEGMENT_F, SEGMENT_B, SEGMENT_E, SEGMENT_D, SEGMENT_C, SEGMENT_G, D1, D2, D3, D4, GREEN_LED_PIN, RED_LED_PIN]
@@ -140,11 +134,14 @@ class Game:
         self.load_saves_from_file()  # Load saves when game starts
         
         if is_raspberry_pi:
-            self.changed_segments = set()  # Tracks changed segments for optimization
-            self.display_update_event = Event()
+            self.changed_segments = set()
             self.lock = threading.Lock()
-            self.display_score = 5000  # This will be accessed by the display thread
+            self.display_score = 5000
             self.display_thread = None
+            self.display_update_event = threading.Event() 
+            self.start_display_thread()    
+            self.display_running = True 
+            self.display_score_lock = threading.Lock()  
             
         # Colors
         self.BLACK = (0, 0, 0)
@@ -256,27 +253,42 @@ class Game:
 
     def update_7seg_display(self):
         digit_pins = [D1, D2, D3, D4]
-        while True:
-            with self.lock:
-                current_score = self.display_score
-            digits = str(current_score).zfill(4)
-            for i in range(4):
-                digit = digits[i]
-                segments = digit_to_segments[digit]
-                # Activate current digit
-                GPIO.output(digit_pins[i], GPIO.HIGH)
-                # Set segments
-                GPIO.output(SEGMENT_A, GPIO.HIGH if segments[0] else GPIO.LOW)
-                GPIO.output(SEGMENT_B, GPIO.HIGH if segments[1] else GPIO.LOW)
-                GPIO.output(SEGMENT_C, GPIO.HIGH if segments[2] else GPIO.LOW)
-                GPIO.output(SEGMENT_D, GPIO.HIGH if segments[3] else GPIO.LOW)
-                GPIO.output(SEGMENT_E, GPIO.HIGH if segments[4] else GPIO.LOW)
-                GPIO.output(SEGMENT_F, GPIO.HIGH if segments[5] else GPIO.LOW)
-                GPIO.output(SEGMENT_G, GPIO.HIGH if segments[6] else GPIO.LOW)
-                # Keep the digit on for 5ms for brightness
-                time.sleep(0.005)
-                # Turn off the current digit
-                GPIO.output(digit_pins[i], GPIO.LOW) 
+        try:
+            while self.display_running:
+                with self.display_score_lock:  # Use lock for atomic read
+                    current_score = self.display_score
+                digits = str(current_score).zfill(4)
+            
+                for i in range(4):
+                    # Turn off all digits first
+                    GPIO.output(digit_pins, GPIO.LOW)
+                
+                    # Get segment data
+                    digit = digits[i]
+                    segments = digit_to_segments[digit]
+                
+                    # Set segments
+                    GPIO.output(SEGMENT_A, segments[0])
+                    GPIO.output(SEGMENT_B, segments[1])
+                    GPIO.output(SEGMENT_C, segments[2])
+                    GPIO.output(SEGMENT_D, segments[3])
+                    GPIO.output(SEGMENT_E, segments[4])
+                    GPIO.output(SEGMENT_F, segments[5])
+                    GPIO.output(SEGMENT_G, segments[6])
+                
+                    # Enable current digit
+                    GPIO.output(digit_pins[i], GPIO.HIGH)
+                
+                    # Hold for stable display
+                    time.sleep(0.002)  # Reduced from 0.005
+                
+                    # Disable digit before next iteration
+                    GPIO.output(digit_pins[i], GPIO.LOW)
+                
+                # Refresh rate control
+                time.sleep(0.001)
+        except KeyboardInterrupt:
+            GPIO.cleanup()
 
     def display_changed_segments(self, number):
         # Only update what has changed
@@ -299,14 +311,15 @@ class Game:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
-        self.score = max(0, self.score + points)
-        if points != 0:
-            self.score_adjustment = f"{points:+d}"
-            self.score_adjustment_time = time.time()
-            pygame.time.set_timer(pygame.USEREVENT + 1, 2000)
+        with self.display_score_lock:  # Add this
+            self.score = max(0, self.score + points)
+            self.display_score = self.score  # Atomic update under lock
+            
+    def __del__(self):
         if is_raspberry_pi:
-            with self.lock:
-                self.display_score = self.score  # Atomic update under lock
+            self.display_running = False
+            self.display_thread.join()
+            GPIO.cleanup()
 
     def main_game_loop(self):
         self.change_music(self.level_music)  # Start level music
