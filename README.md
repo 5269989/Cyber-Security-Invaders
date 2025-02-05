@@ -6,7 +6,7 @@
 [![Pygame](https://img.shields.io/badge/Pygame-2.1.3-green?logo=pygame)](https://pygame.org)  
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry_Pi-Compatible-red?logo=raspberrypi)](https://raspberrypi.org)
 
-![Gameplay Demo](assets/gameplay.gif) *Add your gameplay GIF here*
+![Gameplay Demo](assets/gameplay.gif) 
 
 ## 🚀 New Features & Enhancements
 
