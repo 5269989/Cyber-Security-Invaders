@@ -1,12 +1,12 @@
-###CURRENT ISSUES
-#Boss and healthbar don't render when paused 
+###CURRENT ISSUES 
 
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
 #Incorporate RFID Reader into game tags activate cheat modes (e.g., infinite ammo or invincibility)
 #After completing boss level you have option to continue in arcade for as many levels as you want
 #Few more powerups - Super Speed, Slowing down enemies etc...
-#Finish the boss fight - Add different boss abilities (Shooting Virus bullets, aiming at player etc...), possibly incorporate a minigame, 
+#Finish the boss fight - Add better boss ai to make more difficult different boss abilities (Shooting Virus bullets that explode (with virus.png), aiming at player etc...)
+#incorporate a minigame at 50% health based on the fallout 4 terminal hacking and if its failed then the boss gets harder also have the minigame stored in a seperate py file called minigame.py 
 #Optimise the 7seg display to be brighter and faster (Only update changed numbers?)
 #Clean and optimise code
 
@@ -19,6 +19,7 @@ import json
 import math
 import requests
 import datetime  
+from requests.auth import HTTPBasicAuth
 
 # Check if running on a Raspberry Pi
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
@@ -26,18 +27,12 @@ is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().l
 if is_raspberry_pi:
     import RPi.GPIO as GPIO, threading
     from threading import Event
-    from mfrc522 import SimpleMFRC522 
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
     
     GREEN_LED_PIN = 20
     RED_LED_PIN = 21
     
-    # Add RFID Reader
-    rfid_reader = SimpleMFRC522()
-    # Cheat Mode LEDs
-    CHEAT_LED_PIN = 19
-    GPIO.setup(CHEAT_LED_PIN, GPIO.OUT)
 
     # Define the GPIO pins connected to segments and digits
     D4 = 16
@@ -51,35 +46,59 @@ if is_raspberry_pi:
     SEGMENT_E = 22
     SEGMENT_D = 23
     SEGMENT_C = 24
-    SEGMENT_G = 27
+    SEGMENT_G = 27 
 
-    
-    GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
+    GPIO.setmode(GPIO.BCM)  
     pins = [SEGMENT_A, SEGMENT_F, SEGMENT_B, SEGMENT_E, SEGMENT_D, SEGMENT_C, SEGMENT_G, D1, D2, D3, D4, GREEN_LED_PIN, RED_LED_PIN]
-    GPIO.setup(pins, GPIO.OUT)
+    GPIO.setup(pins, GPIO.OUT, initial=GPIO.LOW)
 
     # Digit to segment mapping (0-9)
     digit_to_segments = {
-        '0': [0, 0, 0, 0, 0, 0, 1],
-        '1': [1, 0, 0, 1, 1, 1, 1],
-        '2': [0, 0, 1, 0, 0, 1, 0],
-        '3': [0, 0, 0, 0, 1, 1, 0],
-        '4': [1, 0, 0, 1, 1, 0, 0],
-        '5': [0, 1, 0, 0, 1, 0, 0],
-        '6': [0, 1, 0, 0, 0, 0, 0],
-        '7': [0, 0, 0, 1, 1, 1, 1],
-        '8': [0, 0, 0, 0, 0, 0, 0],
-        '9': [0, 0, 0, 0, 1, 0, 0]
-    }       # A  B  C  D  E  F  G
+        '0': [0,0,0,0,0,0,1],
+        '1': [1,0,0,1,1,1,1],  
+        '2': [0,0,1,0,0,1,0],
+        '3': [0,0,0,0,1,1,0],
+        '4': [1,0,0,1,1,0,0],  
+        '5': [0,1,0,0,1,0,0],  
+        '6': [0,1,0,0,0,0,0],
+        '7': [0,0,0,1,1,1,1],
+        '8': [0,0,0,0,0,0,0],
+        '9': [0,0,0,0,1,0,0]
+    }
 
     # Function to display a 4-digit number on the 7-segment display
     def display_number_on_7seg(number):
-        new_number = str(number).zfill(4)
-        for i in range(4):
-            if new_number[i] != self.prev_display_score[i]:
-                # Only update changed digit
-                self.display_digit(i, new_number[i])
-        self.prev_display_score = new_number
+        digits = str(number).zfill(4)  # Ensure the number is 4 digits long
+        start_time = time.perf_counter()
+        for i, digit in enumerate(digits):
+            # Select the appropriate digit to display
+            
+            digit_pins = [D1, D2, D3, D4]
+            GPIO.output(digit_pins[i], GPIO.HIGH)  # Activate current digit
+            
+            # Turn on/off the segments based on the digit
+            segments = digit_to_segments[digit]
+            GPIO.output(SEGMENT_A, GPIO.HIGH if segments[0] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_B, GPIO.HIGH if segments[1] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_C, GPIO.HIGH if segments[2] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_D, GPIO.HIGH if segments[3] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_E, GPIO.HIGH if segments[4] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_F, GPIO.HIGH if segments[5] == 1 else GPIO.LOW)
+            GPIO.output(SEGMENT_G, GPIO.HIGH if segments[6] == 1 else GPIO.LOW)
+            
+            # Turn off other digits to avoid overlap
+            for j in range(4):
+                if j != i:
+                    GPIO.output(digit_pins[j], GPIO.LOW)
+            
+            while time.perf_counter() - start_time < 0.001 * (i + 1):
+                pass
+
+        # Turn off all digits after displaying
+        GPIO.output(D1, GPIO.LOW)
+        GPIO.output(D2, GPIO.LOW)
+        GPIO.output(D3, GPIO.LOW)
+        GPIO.output(D4, GPIO.LOW)
 
 else:
     print("Not running on RPi, GPIO functionality disabled.")
@@ -114,29 +133,15 @@ class Game:
         self.current_music = None  # Track currently playing music
         self.save_slots = [None, None, None]  # Default empty save slots
         self.load_saves_from_file()  # Load saves when game starts
-        self.endless_mode = False
-        self.wave_count = 0
-        self.cheat_modes = {
-            'infinite_ammo': False,
-            'invincible': False
-        }
-        self.boss_abilities_active = {
-            'virus_bullets': False,
-            'emp_bullets': False
-        }
-        self.hacking_minigame_active = False
-        self.hacking_minigame_completed = False
-        self.prev_display_score = "0000"  # For 7seg optimization
+
+
         
         if is_raspberry_pi:
-            self.changed_segments = set()  # Tracks changed segments for optimization
-            self.display_update_event = Event()
-            self.lock = threading.Lock()
-            self.display_score = 5000  # This will be accessed by the display thread
-            self.display_thread = None
-            self.rfid_thread = threading.Thread(target=self.check_rfid)
-            self.rfid_thread.daemon = True
-            self.rfid_thread.start()
+            self.display_score_front = 5000  # Value shown on display
+            self.display_score_back = 5000   # Buffered updates
+            self.display_update_flag = False
+            self.display_lock = threading.Lock()
+            self.start_display_thread()
             
         # Colors
         self.BLACK = (0, 0, 0)
@@ -148,9 +153,11 @@ class Game:
         self.LIGHTBLUE = (60, 60 , 255)
 
         # Fonts
-        self.font = pygame.font.SysFont("Arial", 24)
-        self.big_font = pygame.font.SysFont("Arial", 40)
-        self.bold_font = pygame.font.SysFont("Arial", 80, bold=True)
+        self.font = pygame.font.Font("assets/fonts/TextFont.ttf", 18)
+        self.big_font = pygame.font.Font("assets/fonts/TextFont.ttf", 23)
+        self.bold_font = pygame.font.Font("assets/fonts/TextFont.ttf", 40)
+        self.title_font = pygame.font.Font("assets/fonts/TextFont.ttf", 30)  
+
 
         self.player = Player(self)
         self.boss = Boss(self)
@@ -205,7 +212,7 @@ class Game:
         #Check if music files exist before loading them
         for music_file in [self.menu_music, self.level_music, self.boss_music, self.game_over_music]:
             if not os.path.exists(music_file):
-                print(f"Warning: Music file missing -> {music_file}")  # Debugging info
+                print(f"🚨 Warning: Music file missing -> {music_file}")  # Debugging info
 
         #Sound Effect Paths
         self.shoot_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "shoot.wav"))
@@ -216,7 +223,7 @@ class Game:
         self.power_up_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "sounds", "power_up.wav"))
 
         #Set volume (adjust as needed)
-        pygame.mixer.music.set_volume(0.1)
+        pygame.mixer.music.set_volume(0.8)
 
     def load_menu_background(self):
         # Load animated menu backgrounds
@@ -247,72 +254,32 @@ class Game:
             self.current_music = new_track  # Track current music
 
     def update_7seg_display(self):
-        while True:
-            self.display_update_event.wait()  # Wait for an update event
-            self.display_update_event.clear()  # Clear the event after handling it
-            
-            with self.lock:
-                display_number_on_7seg(self.display_score) 
+        digit_pins = [D1, D2, D3, D4]
+        try:
+            while self.display_running:
+                # Atomic score swap
+                if self.display_update_flag:
+                    with self.display_lock:
+                        self.display_score_front = self.display_score_back
+                        self.display_update_flag = False
                 
-    def check_rfid(self):
-        """RFID Reader thread function"""
-        while True:
-            try:
-                id, text = rfid_reader.read()
-                if str(id) == "123456789":  # Replace with your tag ID
-                    self.toggle_cheat_mode()
-                    GPIO.output(CHEAT_LED_PIN, GPIO.HIGH)
-                    time.sleep(1)
-                    GPIO.output(CHEAT_LED_PIN, GPIO.LOW)
-            except Exception as e:
-                print("RFID Error:", e)
-            time.sleep(0.1)
-
-    def hacking_minigame(self):
-        """Starts the hacking minigame where the player must press the correct sequence."""
-        self.hacking_minigame_active = True
-      
-        symbols = ['▲', '▼', '◄', '►']
-        sequence = [random.choice(symbols) for _ in range(4)]
-        current_step = 0
-        start_time = time.time()
-    
-        while time.time() - start_time < 10 and current_step < 4:
-            self.screen.fill(self.BLACK)
-        
-            # Display sequence
-            for i, symbol in enumerate(sequence):
-                color = self.GREEN if i < current_step else self.WHITE
-                text = self.bold_font.render(symbol, True, color)
-                self.screen.blit(text, (self.screen_width // 2 - text.get_width() // 2, 150 + i * 50))
-        
-            pygame.display.flip()
-        
-            # Check input
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_UP and sequence[current_step] == '▲':
-                        current_step += 1
-                    elif event.key == pygame.K_DOWN and sequence[current_step] == '▼':
-                        current_step += 1
-                    elif event.key == pygame.K_LEFT and sequence[current_step] == '◄':
-                        current_step += 1
-                    elif event.key == pygame.K_RIGHT and sequence[current_step] == '►':
-                        current_step += 1
-        
-            if current_step >= 4:
-                self.display_feedback("Minigame Success!", self.GREEN)
-                self.boss.speed *= 0.7  # Slow boss
-                self.boss.shoot_interval *= 1.5  # Reduce attack rate
-                break
-        
-        if current_step < 4:
-            self.display_feedback("Minigame Failed!", self.RED)
-            self.boss.speed *= 1.5  # Speed up boss
-            self.boss.shoot_interval *= 0.7  # Increase attack rate
-        
-        self.hacking_minigame_active = False
-        self.hacking_minigame_completed = True
+                digits = f"{self.display_score_front:04d}"
+                
+                for i in range(4):
+                    # Activate digit and set segments
+                    GPIO.output(digit_pins[i], GPIO.HIGH)
+                    segments = digit_to_segments[digits[i]]
+                    GPIO.output([SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, 
+                                SEGMENT_E, SEGMENT_F, SEGMENT_G], 
+                              [GPIO.HIGH if s else GPIO.LOW for s in segments])
+                    time.sleep(0.001)
+                    GPIO.output(digit_pins[i], GPIO.LOW)
+                    
+        except KeyboardInterrupt:
+            GPIO.cleanup()
+                
+        except KeyboardInterrupt:
+            GPIO.cleanup()
 
     def display_changed_segments(self, number):
         # Only update what has changed
@@ -334,37 +301,25 @@ class Game:
             if j != position:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
-    def toggle_cheat_mode(self):
-        """Cycle through available cheat modes"""
-        if not self.cheat_modes['infinite_ammo']:
-            self.cheat_modes['infinite_ammo'] = True
-            self.display_feedback("INFINITE AMMO!", self.GREEN)
-        elif not self.cheat_modes['invincible']:
-            self.cheat_modes['invincible'] = True
-            self.player.set_invulnerable(duration=9999)
-            self.display_feedback("INVINCIBILITY!", self.BLUE)
-        else:
-            self.cheat_modes.update((k, False) for k in self.cheat_modes)
-            self.player.invulnerable = False
-            self.display_feedback("CHEATS DISABLED!", self.RED)
-
     def adjust_score(self, points):
-        self.score = max(0, self.score + points)  # Ensure score is non-negative
-        if points != 0:
-            self.score_adjustment = f"{points:+d}"  # Store the adjustment for display
-            self.score_adjustment_time = time.time()
-            # Clear existing timer and set a new one
-            pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Clear existing timer
-            pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Set new timer for 2 seconds
+        with self.display_lock:
+            new_score = max(0, self.score + points)
+            if new_score != self.score:
+                self.score = new_score
+                self.display_score_back = new_score
+                self.display_update_flag = True
+            
+    def __del__(self):
+        if is_raspberry_pi:
+            self.display_running = False
+            self.display_thread.join()
+            GPIO.cleanup()
 
     def main_game_loop(self):
         self.change_music(self.level_music)  # Start level music
         self.start_time = time.time()
         last_score_update_time = self.start_time
         score_paused = False
-        if self.endless_mode:
-            self.wave_count += 1
-            self.enemy_manager.increase_difficulty(self.wave_count)
         while not self.game_over:
             self.screen.fill(self.BLACK)
             for event in pygame.event.get():
@@ -445,14 +400,22 @@ class Game:
         while self.paused:
             # Draw game background first
             self.screen.fill(self.BLACK)
-        
+ 
+                # Draw enemies or boss based on current game state
+            if self.boss_fight:
+                # Draw boss and health bar
+                self.screen.blit(self.boss.current_image, (self.boss.x, self.boss.y))
+                health_width = int(200 * (self.boss.health / self.boss.max_health))
+                pygame.draw.rect(self.screen, self.RED, (self.screen_width // 2 - 100, 10, 200, 20))
+                pygame.draw.rect(self.screen, self.GREEN, (self.screen_width // 2 - 100, 10, health_width, 20))
+            else:
+                self.enemy_manager.draw()
+
             # Draw player, enemies, bullets, and power-ups
             self.player.draw()
             self.enemy_manager.draw()
             self.bullet_manager.update_player_bullets(draw_only=True)
             self.bullet_manager.update_enemy_bullets(draw_only=True)
-            self.boss.draw()
-            self.draw_boss_health()
 
              # *** Manually draw power-ups without updating them ***
             for power_up in self.power_ups.power_ups:
@@ -581,15 +544,6 @@ class Game:
         if hasattr(self, 'score_adjustment'):
             adjust_text = self.font.render(self.score_adjustment, True, self.RED if self.score_adjustment[0] == '-' else self.GREEN)
             self.screen.blit(adjust_text, (score_text.get_width() + 20, 40))
-            
-        if self.cheat_modes['infinite_ammo']:
-            cheat_text = self.font.render("INF AMMO", True, self.YELLOW)
-            self.screen.blit(cheat_text, (10, 70))
-        
-        if self.player.shoot_disabled:
-            emp_text = self.font.render("EMP ACTIVE!", True, self.BLUE)
-            self.screen.blit(emp_text, 
-                (self.screen_width//2 - emp_text.get_width()//2, 70))
 
     def adjust_score(self, points):
         self.score = max(0, self.score + points)  # Ensure score is non-negative
@@ -788,7 +742,7 @@ class Game:
             self.screen.blit(self.menu_backgrounds[self.menu_background_index], (0, 0))
 
             # Title text
-            title_text = self.bold_font.render("Cyber Security Invaders", True, self.RED)
+            title_text = self.title_font.render("Cyber Security Invaders", True, self.RED)  # Red color
             self.screen.blit(title_text, (self.screen_width//2 - title_text.get_width()//2, 50))
 
             # Draw menu items
@@ -1031,11 +985,14 @@ class Game:
         self.main_game_loop()
         
     def check_server_availability(self):
-            try:
-                response = requests.get("https://5269989.pythonanywhere.com/leaderboard", timeout=5)
-                return response.status_code == 200
-            except requests.RequestException:
-                return False   
+        try:
+            # Adding Basic Authentication with the username and password
+            response = requests.get("https://5269989.pythonanywhere.com/leaderboard", 
+                                    timeout=5, 
+                                    auth=HTTPBasicAuth('5269989', 'SAM'))
+            return response.status_code == 200
+        except requests.RequestException:
+            return False
         
     def load_saves_from_file(self):
         """Loads saved game data from saves.json at startup."""
@@ -1059,16 +1016,19 @@ class Game:
     def show_leaderboard(self):
         self.create_loading_screen()  # Show loading screen
         try:
-            response = requests.get("https://5269989.pythonanywhere.com/leaderboard", timeout=5)
+            # Adding Basic Authentication with the username and password
+            response = requests.get("https://5269989.pythonanywhere.com/leaderboard", 
+                                    timeout=5, 
+                                    auth=HTTPBasicAuth('5269989', 'SAM'))
             if response.status_code == 200:
                 leaderboard_data = response.json()
                 self.screen.fill(self.BLACK)
                 leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
                 self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
-        
+    
                 smaller_font = pygame.font.SysFont("Arial", 22)
                 y_position = 100
-        
+    
                 for i, entry in enumerate(leaderboard_data):
                     player_text = smaller_font.render(f"{i+1}. {entry['player']} - {entry['score']} points", True, self.WHITE)
                     self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
@@ -1220,34 +1180,8 @@ class Game:
             del self.score_adjustment
 
     def end_game_screen(self):
-        if self.boss_fight and not self.endless_mode:
-            self.screen.fill(self.BLACK)
-
-            # Display the message
-            choice_text = self.font.render("Enter Endless Mode? (Y/N)", True, self.WHITE)
-            self.screen.blit(choice_text, (self.screen_width // 2 - choice_text.get_width() // 2, self.screen_height // 2 - 50))
-            pygame.display.flip()
-
-            # Wait for the player to press Y or N
-            waiting_for_input = True
-            choice = None  # Initialize choice variable
-            while waiting_for_input:
-                for event in pygame.event.get():
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_y:
-                            choice = "Y"
-                            waiting_for_input = False
-                        elif event.key == pygame.K_n:
-                            choice = "N"
-                            waiting_for_input = False
-
-            # Now check the value of `choice`
-            if choice == "Y":
-                self.endless_mode = True
-                self.start_endless_mode()    
-
         self.screen.fill(self.BLACK)
-        
+    
         # Game Over Text
         end_text = self.bold_font.render(f"YOU WIN! Your Score is: {self.score}", True, self.GREEN)
         self.screen.blit(end_text, (self.screen_width // 2 - end_text.get_width() // 2, self.screen_height // 3 - end_text.get_height() // 2))
@@ -1295,7 +1229,11 @@ class Game:
         self.create_loading_screen()  # Show loading screen
         try:
             payload = {'player_name': name, 'score': score}
-            response = requests.post("https://5269989.pythonanywhere.com/submit_score", json=payload, timeout=5)
+            # Adding Basic Authentication with the username and password
+            response = requests.post("https://5269989.pythonanywhere.com/submit_score", 
+                                     json=payload, 
+                                     timeout=5, 
+                                     auth=HTTPBasicAuth('5269989', 'SAM'))
             if response.status_code != 200:
                 raise Exception(f"Failed to submit score. Status code: {response.status_code}")
             else:
@@ -1304,7 +1242,7 @@ class Game:
             self.display_feedback(f"Network Error: {str(e)}", self.RED)
         except Exception as e:
             self.display_feedback(f"Error: {str(e)}", self.RED)
-        
+    
         self.show_menu()
         
 class Player:
@@ -1320,8 +1258,6 @@ class Player:
         self.invulnerable_timer = 0
         self.invulnerable_duration = 5  # Duration in seconds for invulnerability
         self.shield_outline = self.create_shield_outline()
-        self.shoot_disabled = False
-        self.shoot_disabled_time = 0
 
     def load_and_scale_image(self, filename, size):
         try:
@@ -1330,11 +1266,6 @@ class Player:
             print(f"Error loading or scaling image '{filename}': {e}")
             pygame.quit()
             quit()
-            
-    def disable_shooting(self, duration):
-        """Disables shooting for a given duration."""
-        self.shoot_disabled = True
-        self.shoot_disabled_time = time.time() + duration
 
     def create_shield_outline(self):
         outline_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -1372,10 +1303,6 @@ class Player:
         self.x = max(0, min(self.x, self.game.screen_width - self.width))
 
     def shoot(self, keys):
-        if self.shoot_disabled:
-            if time.time() > self.shoot_disabled_time:
-                self.shoot_disabled = False
-            return
         current_time = time.time()
         if keys[pygame.K_SPACE] and current_time - self.game.bullet_manager.last_shot_time >= self.game.bullet_manager.player_shoot_interval:
             self.game.bullet_manager.add_player_bullet(self.x + self.width // 2, self.y)
@@ -1418,13 +1345,12 @@ class Boss:
         self.current_image = self.image1
         self.direction = 1  # 1 for right, -1 for left
         self.game = game
-        self.emp_cooldown = 0
-        self.virus_bullets = []
-        
-        self.boss_abilities_active = {
-            'virus_bullets': False,
-            'emp_bullets': False
-        }
+        self.attack_phase = 1
+        self.last_phase_change = 0
+        self.charge_cooldown = 0
+        self.virus_images = [pygame.image.load(f"assets/virus_{i}.png") for i in range(1,4)]
+        self.current_virus_frame = 0
+        self.last_frame_update = 0
 
     def load_and_scale_image(self, filename, size):
         try:
@@ -1435,60 +1361,84 @@ class Boss:
             quit()
 
     def update(self):
-        if hasattr(self, 'boss_abilities_active') and self.health < 50 and not self.boss_abilities_active['virus_bullets']:
-            self.activate_virus_bullets()
-        
-            if self.emp_cooldown <= time.time():
-                self.shoot_emp_bullet()
-        
-            # Update virus bullets
-            for bullet in self.virus_bullets:
-                # Home towards player
-                dx = self.game.player.x - bullet[0]
-                dy = self.game.player.y - bullet[1]
-                dist = math.sqrt(dx**2 + dy**2)
-                if dist != 0:
-                    bullet[0] += dx/dist * 3
-                    bullet[1] += dy/dist * 3
-                pygame.draw.circle(self.game.screen, self.game.RED, 
-                                 (int(bullet[0]), int(bullet[1])), 3)
-                
-        self.x += self.speed * self.direction
+        # Enhanced movement
+        self.x += self.speed * self.direction * (1.5 if self.health < 50 else 1)
         if self.x <= 0 or self.x + self.width >= self.game.screen_width:
             self.direction *= -1
+            if self.health < 30:
+                self.speed *= 1.2
 
+        # Phase management
+        if self.health <= 50 and self.attack_phase == 1:
+            self.attack_phase = 2
+            self.speed *= 1.5
+            self.last_phase_change = time.time()
+        
+        # Attack patterns
         current_time = time.time()
-        if current_time - self.last_animation_time >= self.animation_interval:
-            self.current_image = self.image2 if self.current_image == self.image1 else self.image1
-            self.last_animation_time = current_time
-
-        self.game.screen.blit(self.current_image, (self.x, self.y))
-        self.draw_health_bar()
-
         if current_time - self.last_shot_time >= self.shoot_interval:
-            self.game.bullet_manager.add_boss_bullet(self.x + self.width // 2, self.y + self.height)
+            if self.attack_phase == 1:
+                self.phase_one_attack()
+            else:
+                self.phase_two_attack()
             self.last_shot_time = current_time
 
+        # Charge attack
+        if self.health < 70 and current_time - self.charge_cooldown > 10:
+            self.charge_attack()
+            self.charge_cooldown = current_time
+
+        # Update virus animation
+        if current_time - self.last_frame_update > 0.1:
+            self.current_virus_frame = (self.current_virus_frame + 1) % 3
+            self.last_frame_update = current_time
+
+        # Draw boss
+        self.game.screen.blit(self.current_image, (self.x, self.y))
+        self.draw_health_bar()
         return self.game.bullet_manager.check_player_hit_by_boss_bullet()
-
-    def activate_virus_bullets(self):
-        """Activate virus bullets that home toward the player."""
-        self.boss_abilities_active['virus_bullets'] = True  # Mark ability as active
-
-        for _ in range(5):  # Generate 5 virus bullets
-            bullet_x = self.x + self.width // 2
-            bullet_y = self.y + self.height
-            self.virus_bullets.append([bullet_x, bullet_y])
-
-    def shoot_emp_bullet(self):
-        """Shoots an EMP bullet that disables player shooting for a few seconds."""
-        self.emp_cooldown = time.time() + 10  # Set cooldown
     
-        self.game.bullet_manager.boss_bullets.append([
-            self.x + self.width // 2,  # X position
-            self.y + self.height,      # Y position
-            "emp"                      # Bullet type
-        ])
+    def phase_one_attack(self):
+        # Spread shot pattern
+        for angle in range(-30, 31, 15):
+            self.game.bullet_manager.add_boss_bullet(
+                self.x + self.width//2,
+                self.y + self.height,
+                angle=math.radians(angle),
+                bullet_type="virus"
+            )
+
+    def phase_two_attack(self):
+        # Targeted homing shots
+        player_center_x = self.game.player.x + self.game.player.width/2
+        angle = math.atan2(
+            (self.game.player.y - self.y) + 50,  # Lead target
+            (player_center_x - (self.x + self.width/2))
+        )
+        self.game.bullet_manager.add_boss_bullet(
+            self.x + self.width//2,
+            self.y + self.height,
+            angle=angle,
+            bullet_type="homing"
+        )
+
+    def charge_attack(self):
+        # Charge towards player position
+        target_x = self.game.player.x
+        self.direction = 1 if target_x > self.x else -1
+        self.speed *= 2
+        pygame.time.set_timer(pygame.USEREVENT + 2, 1000)  # Reset speed after 1sec
+
+    def create_virus_bullet(self, x, y):
+        # Create cluster explosion
+        for angle in range(0, 360, 45):
+            self.game.bullet_manager.add_boss_bullet(
+                x, y,
+                angle=math.radians(angle),
+                bullet_type="virus",
+                size=5,
+                speed=3
+            )
 
     def draw_health_bar(self):
         health_width = int(200 * (self.health / self.max_health))
@@ -1500,28 +1450,20 @@ class Boss:
             if self.x < bullet[0] < self.x + self.width and self.y < bullet[1] < self.y + self.height:
                 self.game.bullet_manager.player_bullets.remove(bullet)
                 self.health -= 1
-            
-                if self.health <= 50 and not self.game.hacking_minigame_active and not self.game.hacking_minigame_completed:
-                    self.game.hacking_minigame()  # Start minigame
-                
                 if self.health <= 0:
-                    self.game.change_music(self.game.boss_defeated_music)
+                    self.game.change_music(self.game.boss_defeated_music)  # Correct music reference
                     self.game.display_feedback("Boss Defeated!", self.game.GREEN)
-                    self.game.power_ups.reset_power_up()
+                    self.game.power_ups.reset_power_up()  
                     self.game.end_game_screen()
-                    
 
 class EnemyManager:
     def __init__(self, game):
         self.enemies = []
         self.enemy_image = self.load_and_scale_image("enemy.png", (40, 40))
-        self.enemy_speed = 1
-        self.original_speed = self.enemy_speed  # Store original speed
-        self.shoot_prob = 0.001
+        self.enemy_speed = 2
+        self.shoot_prob = 0.003
         self.direction = 1
         self.game = game
-        self.ddos_active = False  # Add DDoS state tracking
-        self.ddos_end_time = 0
         self.create_enemies()
 
     def load_and_scale_image(self, filename, size):
@@ -1541,10 +1483,6 @@ class EnemyManager:
                 self.enemies.append([enemy_x, enemy_y])
 
     def update(self):
-        if self.ddos_active and time.time() > self.ddos_end_time:
-            self.ddos_active = False
-            self.enemy_speed = self.original_speed  # Restore original speed
-            
         if not self.enemies:
             if self.game.paused:  
                 return  
@@ -1577,38 +1515,19 @@ class EnemyManager:
                 enemy[1] += 20
             self.direction *= -1
 
-        edge_reached = False
-        for enemy in self.enemies:
-            enemy[0] += self.enemy_speed * self.direction
-            if enemy[0] <= 0 or enemy[0] + 40 >= self.game.screen_width:
-                edge_reached = True
-
-            if random.random() < self.shoot_prob:
-                self.game.bullet_manager.add_enemy_bullet(enemy[0] + 20, enemy[1] + 40)
-
-            if enemy[1] + 40 >= self.game.screen_height:
-                self.game.game_over = True
-                self.game.game_over_screen()
-
-        if edge_reached:
-            for enemy in self.enemies:
-                enemy[1] += 20
-            self.direction *= -1
-
     def draw(self):
         for enemy in self.enemies:
             self.game.screen.blit(self.enemy_image, (enemy[0], enemy[1]))
 
-    def increase_difficulty(self, wave):
-        self.enemy_speed += 0.2 * wave
-        self.shoot_prob += 0.0005 * wave
+    def increase_difficulty(self):
+        self.enemy_speed += 0.5
+        self.shoot_prob += 0.001
 
 class BulletManager:
     def __init__(self, game):
         self.player_bullets = []
         self.enemy_bullets = []
         self.boss_bullets = []
-        self.emp_bullets = []
         self.bullet_width = 5
         self.player_bullet_height = 10  # Default height for player bullets
         self.enemy_bullet_height = 10   # New attribute for enemy bullet height
@@ -1619,7 +1538,9 @@ class BulletManager:
         self.game = game
         self.angle = math.radians(20)
         self.triple_shot = False
-        
+        self.virus_bullets = []
+        self.homing_bullets = []
+
     def add_player_bullet(self, x, y):
         if self.triple_shot:
             # Middle bullet (straight ahead)
@@ -1634,8 +1555,74 @@ class BulletManager:
     def add_enemy_bullet(self, x, y):
         self.enemy_bullets.append([x, y])
 
-    def add_boss_bullet(self, x, y):
-        self.boss_bullets.append([x, y])
+    def add_boss_bullet(self, x, y, angle=0, bullet_type="normal", size=10, speed=5):
+        if bullet_type == "virus":
+            self.virus_bullets.append({
+                "x": x,
+                "y": y,
+                "angle": angle,
+                "size": size,
+                "speed": speed,
+                "create_time": time.time()
+            })
+        elif bullet_type == "homing":
+            self.homing_bullets.append({
+                "x": x,
+                "y": y,
+                "angle": angle,
+                "size": size,
+                "speed": speed,
+                "create_time": time.time()
+            })
+        else:
+            self.boss_bullets.append([x, y])
+            
+    def update_boss_bullets(self):
+        # Update virus bullets with animation and splitting
+        for bullet in self.virus_bullets[:]:
+            bullet["x"] += bullet["speed"] * math.sin(bullet["angle"])
+            bullet["y"] += bullet["speed"] * math.cos(bullet["angle"])
+            
+            # Draw animated virus bullet
+            frame = self.game.boss.virus_images[self.game.boss.current_virus_frame]
+            self.game.screen.blit(frame, (bullet["x"], bullet["y"]))
+            
+            # Split into smaller bullets after time or collision
+            if time.time() - bullet["create_time"] > 2:
+                self.create_virus_cluster(bullet)
+                self.virus_bullets.remove(bullet)
+
+        # Update homing bullets
+        for bullet in self.homing_bullets[:]:
+            # Calculate new angle towards player
+            player_center = (self.game.player.x + self.game.player.width/2,
+                           self.game.player.y + self.game.player.height/2)
+            dx = player_center[0] - bullet["x"]
+            dy = player_center[1] - bullet["y"]
+            target_angle = math.atan2(dy, dx)
+            
+            # Smoothly adjust angle
+            bullet["angle"] += (target_angle - bullet["angle"]) * 0.1
+            
+            # Update position
+            bullet["x"] += bullet["speed"] * math.cos(bullet["angle"])
+            bullet["y"] += bullet["speed"] * math.sin(bullet["angle"])
+            
+            # Draw homing bullet
+            pygame.draw.circle(self.game.screen, self.game.ORANGE,
+                             (int(bullet["x"]), int(bullet["y"])), bullet["size"])
+
+    def create_virus_cluster(self, parent_bullet):
+        if parent_bullet["size"] > 3:
+            for angle in range(0, 360, 90):
+                self.virus_bullets.append({
+                    "x": parent_bullet["x"],
+                    "y": parent_bullet["y"],
+                    "angle": math.radians(angle),
+                    "size": parent_bullet["size"] - 2,
+                    "speed": parent_bullet["speed"] + 1,
+                    "create_time": time.time()
+                })
 
     def update_player_bullets(self, draw_only=False):
         bullets_to_remove = []
@@ -1697,10 +1684,24 @@ class BulletManager:
                self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
                self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
                 self.boss_bullets.remove(bullet)  # Bullet is removed if it hits the shield
-        for bullet in self.boss_bullets[:]:
-            if len(bullet) > 2 and bullet[2] == "emp":
-                if self.check_emp_collision(bullet):
-                    self.game.player.disable_shooting(5)  # Disable shooting for 5 sec
+
+    def check_collisions(self):
+        # Enhanced collision detection for new bullet types
+        for bullet in self.virus_bullets[:]:
+            if self.check_player_collision(bullet["x"], bullet["y"], bullet["size"]):
+                self.create_virus_cluster(bullet)
+                self.virus_bullets.remove(bullet)
+                return True
+                
+        for bullet in self.homing_bullets[:]:
+            if self.check_player_collision(bullet["x"], bullet["y"], bullet["size"]):
+                self.homing_bullets.remove(bullet)
+                return True
+
+    def check_player_collision(self, x, y, size):
+        player = self.game.player
+        return (player.x < x < player.x + player.width and 
+                player.y < y < player.y + player.height)
 
     def check_player_hit(self):
         for bullet in self.enemy_bullets[:]:
@@ -1708,16 +1709,6 @@ class BulletManager:
                 self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height):
                 if not self.game.player.invulnerable:
                     self.enemy_bullets.remove(bullet)
-                    self.game.last_hit_time = time.time()
-                    return True
-        return False
-
-    def check_emp_collision(self, bullet):
-        for bullet in self.emp_bullets[:]:
-            if (self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and 
-                self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height):
-                if not self.game.player.invulnerable:
-                    self.emp_bullets.remove(bullet)
                     self.game.last_hit_time = time.time()
                     return True
         return False
@@ -1778,6 +1769,7 @@ class PowerUpManager:
             power_up[1] += 2  # Move downwards
             if power_up[1] > self.game.screen_height:
                 self.power_ups.clear()  # Remove power-up if it goes off screen
+                self.power_up_timer = time.time()
             else:
                 pygame.draw.circle(self.game.screen, self.game.BLUE, (int(power_up[0]), int(power_up[1])), 10)
 
@@ -1800,12 +1792,9 @@ class PowerUpManager:
     def apply_power_up(self):
         self.power_up_active = True
         self.power_up_timer = time.time()
-        power_up_types = ['Laser']
+        power_up_types = ['Laser', 'Shield', 'TripleShot']
         self.current_power_up = random.choice(power_up_types)
-        if self.current_power_up == 'DDoS':
-                self.game.enemy_manager.ddos_active = True
-                self.game.enemy_manager.ddos_end_time = time.time() + 10
-        elif self.current_power_up == 'Laser':
+        if self.current_power_up == 'Laser':
             self.game.bullet_manager.player_bullet_height = 30
             self.game.bullet_manager.player_bullet_speed = 35
             self.game.bullet_manager.player_shoot_interval = 0.005
