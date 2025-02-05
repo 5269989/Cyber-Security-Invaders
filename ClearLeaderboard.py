@@ -18,7 +18,7 @@ def reset_leaderboard():
                 error_data = response.json()
                 print(f"Failed to delete scores. Error: {error_data}")
             except requests.exceptions.JSONDecodeError:
-                # If decoding fails, print error
+                # If decoding fails, prints the error
                 print(f"Failed to delete scores. Reason: {response.text}")
 
     except requests.RequestException as e:
