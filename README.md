@@ -25,7 +25,7 @@
 - **Networked Leaderboard** 🌐 - Global score tracking via Flask server  
 - **Animated Menus** 🎭 - Dynamic background animations  
 - **Enhanced Soundtrack** 🎵 - Level-specific music and SFX  
-- **Interactive Tutorial** 📖 - Built-in gameplay instructions  
+- **Gameplay Instructions** 📖 - Built-in gameplay instructions  
 
 ## 📦 Installation
 
