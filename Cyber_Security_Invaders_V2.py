@@ -1,5 +1,5 @@
 ###CURRENT ISSUES 
-
+#BOSS BROKEN 
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
 #Incorporate RFID Reader into game tags activate cheat modes (e.g., infinite ammo or invincibility)
