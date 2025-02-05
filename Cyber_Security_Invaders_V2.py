@@ -1,12 +1,12 @@
-###CURRENT ISSUES
-#Boss and healthbar don't render when paused 
+###CURRENT ISSUES 
 
 
 ###FUTURE FEATURES TO BE IMPLEMENTED
 #Incorporate RFID Reader into game tags activate cheat modes (e.g., infinite ammo or invincibility)
 #After completing boss level you have option to continue in arcade for as many levels as you want
 #Few more powerups - Super Speed, Slowing down enemies etc...
-#Finish the boss fight - Add different boss abilities (Shooting Virus bullets, aiming at player etc...), possibly incorporate a minigame, 
+#Finish the boss fight - Add better boss ai to make more difficult different boss abilities (Shooting Virus bullets that explode (with virus.png), aiming at player etc...)
+#incorporate a minigame at 50% health based on the fallout 4 terminal hacking and if its failed then the boss gets harder also have the minigame stored in a seperate py file called minigame.py 
 #Optimise the 7seg display to be brighter and faster (Only update changed numbers?)
 #Clean and optimise code
 
@@ -19,6 +19,7 @@ import json
 import math
 import requests
 import datetime  
+from requests.auth import HTTPBasicAuth
 
 # Check if running on a Raspberry Pi
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
@@ -45,26 +46,25 @@ if is_raspberry_pi:
     SEGMENT_E = 22
     SEGMENT_D = 23
     SEGMENT_C = 24
-    SEGMENT_G = 27
+    SEGMENT_G = 27 
 
-    
-    GPIO.setmode(GPIO.BCM)  # Use BCM pin numbering
+    GPIO.setmode(GPIO.BCM)  
     pins = [SEGMENT_A, SEGMENT_F, SEGMENT_B, SEGMENT_E, SEGMENT_D, SEGMENT_C, SEGMENT_G, D1, D2, D3, D4, GREEN_LED_PIN, RED_LED_PIN]
-    GPIO.setup(pins, GPIO.OUT)
+    GPIO.setup(pins, GPIO.OUT, initial=GPIO.LOW)
 
     # Digit to segment mapping (0-9)
     digit_to_segments = {
-        '0': [0, 0, 0, 0, 0, 0, 1],
-        '1': [1, 0, 0, 1, 1, 1, 1],
-        '2': [0, 0, 1, 0, 0, 1, 0],
-        '3': [0, 0, 0, 0, 1, 1, 0],
-        '4': [1, 0, 0, 1, 1, 0, 0],
-        '5': [0, 1, 0, 0, 1, 0, 0],
-        '6': [0, 1, 0, 0, 0, 0, 0],
-        '7': [0, 0, 0, 1, 1, 1, 1],
-        '8': [0, 0, 0, 0, 0, 0, 0],
-        '9': [0, 0, 0, 0, 1, 0, 0]
-    }       # A  B  C  D  E  F  G
+        '0': [0,0,0,0,0,0,1],
+        '1': [1,0,0,1,1,1,1],  
+        '2': [0,0,1,0,0,1,0],
+        '3': [0,0,0,0,1,1,0],
+        '4': [1,0,0,1,1,0,0],  
+        '5': [0,1,0,0,1,0,0],  
+        '6': [0,1,0,0,0,0,0],
+        '7': [0,0,0,1,1,1,1],
+        '8': [0,0,0,0,0,0,0],
+        '9': [0,0,0,0,1,0,0]
+    }
 
     # Function to display a 4-digit number on the 7-segment display
     def display_number_on_7seg(number):
@@ -133,13 +133,15 @@ class Game:
         self.current_music = None  # Track currently playing music
         self.save_slots = [None, None, None]  # Default empty save slots
         self.load_saves_from_file()  # Load saves when game starts
+
+
         
         if is_raspberry_pi:
-            self.changed_segments = set()  # Tracks changed segments for optimization
-            self.display_update_event = Event()
-            self.lock = threading.Lock()
-            self.display_score = 5000  # This will be accessed by the display thread
-            self.display_thread = None
+            self.display_score_front = 5000  # Value shown on display
+            self.display_score_back = 5000   # Buffered updates
+            self.display_update_flag = False
+            self.display_lock = threading.Lock()
+            self.start_display_thread()
             
         # Colors
         self.BLACK = (0, 0, 0)
@@ -151,9 +153,11 @@ class Game:
         self.LIGHTBLUE = (60, 60 , 255)
 
         # Fonts
-        self.font = pygame.font.SysFont("Arial", 24)
-        self.big_font = pygame.font.SysFont("Arial", 40)
-        self.bold_font = pygame.font.SysFont("Arial", 80, bold=True)
+        self.font = pygame.font.Font("assets/fonts/TextFont.ttf", 18)
+        self.big_font = pygame.font.Font("assets/fonts/TextFont.ttf", 23)
+        self.bold_font = pygame.font.Font("assets/fonts/TextFont.ttf", 40)
+        self.title_font = pygame.font.Font("assets/fonts/TextFont.ttf", 30)  
+
 
         self.player = Player(self)
         self.boss = Boss(self)
@@ -250,12 +254,32 @@ class Game:
             self.current_music = new_track  # Track current music
 
     def update_7seg_display(self):
-        while True:
-            self.display_update_event.wait()  # Wait for an update event
-            self.display_update_event.clear()  # Clear the event after handling it
-            
-            with self.lock:
-                display_number_on_7seg(self.display_score) 
+        digit_pins = [D1, D2, D3, D4]
+        try:
+            while self.display_running:
+                # Atomic score swap
+                if self.display_update_flag:
+                    with self.display_lock:
+                        self.display_score_front = self.display_score_back
+                        self.display_update_flag = False
+                
+                digits = f"{self.display_score_front:04d}"
+                
+                for i in range(4):
+                    # Activate digit and set segments
+                    GPIO.output(digit_pins[i], GPIO.HIGH)
+                    segments = digit_to_segments[digits[i]]
+                    GPIO.output([SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, 
+                                SEGMENT_E, SEGMENT_F, SEGMENT_G], 
+                              [GPIO.HIGH if s else GPIO.LOW for s in segments])
+                    time.sleep(0.001)
+                    GPIO.output(digit_pins[i], GPIO.LOW)
+                    
+        except KeyboardInterrupt:
+            GPIO.cleanup()
+                
+        except KeyboardInterrupt:
+            GPIO.cleanup()
 
     def display_changed_segments(self, number):
         # Only update what has changed
@@ -278,13 +302,18 @@ class Game:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
-        self.score = max(0, self.score + points)  # Ensure score is non-negative
-        if points != 0:
-            self.score_adjustment = f"{points:+d}"  # Store the adjustment for display
-            self.score_adjustment_time = time.time()
-            # Clear existing timer and set a new one
-            pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Clear existing timer
-            pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  # Set new timer for 2 seconds
+        with self.display_lock:
+            new_score = max(0, self.score + points)
+            if new_score != self.score:
+                self.score = new_score
+                self.display_score_back = new_score
+                self.display_update_flag = True
+            
+    def __del__(self):
+        if is_raspberry_pi:
+            self.display_running = False
+            self.display_thread.join()
+            GPIO.cleanup()
 
     def main_game_loop(self):
         self.change_music(self.level_music)  # Start level music
@@ -371,7 +400,17 @@ class Game:
         while self.paused:
             # Draw game background first
             self.screen.fill(self.BLACK)
-        
+ 
+                # Draw enemies or boss based on current game state
+            if self.boss_fight:
+                # Draw boss and health bar
+                self.screen.blit(self.boss.current_image, (self.boss.x, self.boss.y))
+                health_width = int(200 * (self.boss.health / self.boss.max_health))
+                pygame.draw.rect(self.screen, self.RED, (self.screen_width // 2 - 100, 10, 200, 20))
+                pygame.draw.rect(self.screen, self.GREEN, (self.screen_width // 2 - 100, 10, health_width, 20))
+            else:
+                self.enemy_manager.draw()
+
             # Draw player, enemies, bullets, and power-ups
             self.player.draw()
             self.enemy_manager.draw()
@@ -703,7 +742,7 @@ class Game:
             self.screen.blit(self.menu_backgrounds[self.menu_background_index], (0, 0))
 
             # Title text
-            title_text = self.bold_font.render("Cyber Security Invaders", True, self.RED)
+            title_text = self.title_font.render("Cyber Security Invaders", True, self.RED)  # Red color
             self.screen.blit(title_text, (self.screen_width//2 - title_text.get_width()//2, 50))
 
             # Draw menu items
@@ -946,11 +985,14 @@ class Game:
         self.main_game_loop()
         
     def check_server_availability(self):
-            try:
-                response = requests.get("https://5269989.pythonanywhere.com/leaderboard", timeout=5)
-                return response.status_code == 200
-            except requests.RequestException:
-                return False   
+        try:
+            # Adding Basic Authentication with the username and password
+            response = requests.get("https://5269989.pythonanywhere.com/leaderboard", 
+                                    timeout=5, 
+                                    auth=HTTPBasicAuth('5269989', 'SAM'))
+            return response.status_code == 200
+        except requests.RequestException:
+            return False
         
     def load_saves_from_file(self):
         """Loads saved game data from saves.json at startup."""
@@ -974,16 +1016,19 @@ class Game:
     def show_leaderboard(self):
         self.create_loading_screen()  # Show loading screen
         try:
-            response = requests.get("https://5269989.pythonanywhere.com/leaderboard", timeout=5)
+            # Adding Basic Authentication with the username and password
+            response = requests.get("https://5269989.pythonanywhere.com/leaderboard", 
+                                    timeout=5, 
+                                    auth=HTTPBasicAuth('5269989', 'SAM'))
             if response.status_code == 200:
                 leaderboard_data = response.json()
                 self.screen.fill(self.BLACK)
                 leaderboard_title = self.big_font.render("Leaderboard", True, self.YELLOW)
                 self.screen.blit(leaderboard_title, (self.screen_width // 2 - leaderboard_title.get_width() // 2, 30))
-        
+    
                 smaller_font = pygame.font.SysFont("Arial", 22)
                 y_position = 100
-        
+    
                 for i, entry in enumerate(leaderboard_data):
                     player_text = smaller_font.render(f"{i+1}. {entry['player']} - {entry['score']} points", True, self.WHITE)
                     self.screen.blit(player_text, (self.screen_width // 2 - player_text.get_width() // 2, y_position))
@@ -1184,7 +1229,11 @@ class Game:
         self.create_loading_screen()  # Show loading screen
         try:
             payload = {'player_name': name, 'score': score}
-            response = requests.post("https://5269989.pythonanywhere.com/submit_score", json=payload, timeout=5)
+            # Adding Basic Authentication with the username and password
+            response = requests.post("https://5269989.pythonanywhere.com/submit_score", 
+                                     json=payload, 
+                                     timeout=5, 
+                                     auth=HTTPBasicAuth('5269989', 'SAM'))
             if response.status_code != 200:
                 raise Exception(f"Failed to submit score. Status code: {response.status_code}")
             else:
@@ -1193,7 +1242,7 @@ class Game:
             self.display_feedback(f"Network Error: {str(e)}", self.RED)
         except Exception as e:
             self.display_feedback(f"Error: {str(e)}", self.RED)
-        
+    
         self.show_menu()
         
 class Player:
@@ -1567,6 +1616,7 @@ class PowerUpManager:
             power_up[1] += 2  # Move downwards
             if power_up[1] > self.game.screen_height:
                 self.power_ups.clear()  # Remove power-up if it goes off screen
+                self.power_up_timer = time.time()
             else:
                 pygame.draw.circle(self.game.screen, self.game.BLUE, (int(power_up[0]), int(power_up[1])), 10)
 
