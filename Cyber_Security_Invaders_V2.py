@@ -1,14 +1,5 @@
 ###CURRENT ISSUES 
-#BOSS BROKEN 
-
-###FUTURE FEATURES TO BE IMPLEMENTED
-#Incorporate RFID Reader into game tags activate cheat modes (e.g., infinite ammo or invincibility)
-#After completing boss level you have option to continue in arcade for as many levels as you want
-#Few more powerups - Super Speed, Slowing down enemies etc...
-#Finish the boss fight - Add better boss ai to make more difficult different boss abilities (Shooting Virus bullets that explode (with virus.png), aiming at player etc...)
-#incorporate a minigame at 50% health based on the fallout 4 terminal hacking and if its failed then the boss gets harder also have the minigame stored in a seperate py file called minigame.py 
-#Optimise the 7seg display to be brighter and faster (Only update changed numbers?)
-#Clean and optimise code
+#Lots
 
 import pygame
 import random
@@ -20,6 +11,8 @@ import math
 import requests
 import datetime  
 from requests.auth import HTTPBasicAuth
+from minigame import HackingMiniGame
+
 
 # Check if running on a Raspberry Pi
 is_raspberry_pi = platform.system() == "Linux" and "arm" in platform.machine().lower()
@@ -133,8 +126,15 @@ class Game:
         self.current_music = None  # Track currently playing music
         self.save_slots = [None, None, None]  # Default empty save slots
         self.load_saves_from_file()  # Load saves when game starts
+        self.cheat_codes = {
+            "D4A52B11": "invincible",
+            "C3B89A22": "infinite_ammo"
+        }
+        self.active_cheats = set()
+        if is_raspberry_pi:
+            self.init_rfid()
 
-
+        
         
         if is_raspberry_pi:
             self.display_score_front = 5000  # Value shown on display
@@ -142,6 +142,30 @@ class Game:
             self.display_update_flag = False
             self.display_lock = threading.Lock()
             self.start_display_thread()
+            
+            def init_rfid(self):
+                from mfrc522 import SimpleMFRC522
+                self.reader = SimpleMFRC522()
+                self.rfid_thread = threading.Thread(target=self.check_rfid)
+                self.rfid_thread.daemon = True
+                self.rfid_thread.start()
+                
+            def check_rfid(self):
+                while True:
+                    try:
+                        id, text = self.reader.read_no_block()
+                        if id and str(id) in self.cheat_codes:
+                            self.handle_cheat(self.cheat_codes[str(id)])
+                        time.sleep(1)
+                    except Exception as e:
+                        print("RFID Error:", e)
+                        
+            def handle_cheat(self, cheat):
+                self.active_cheats.add(cheat)
+                if cheat == "invincible":
+                    self.player.set_invulnerable(duration=99999)
+                elif cheat == "infinite_ammo":
+                    self.bullet_manager.player_shoot_interval = 0.01
             
         # Colors
         self.BLACK = (0, 0, 0)
@@ -350,6 +374,7 @@ class Game:
                 self.paused = not self.paused
             self.player.check_invulnerability()
             if self.boss_fight:
+                self.check_minigame_trigger()
                 player_hit = self.boss.update()
                 self.boss.check_hit_by_player()
                 if player_hit:
@@ -393,6 +418,18 @@ class Game:
                         self.display_update_event.set()
             pygame.display.update()
             self.clock.tick(60)
+
+    def check_minigame_trigger(self):
+        if self.boss.health <= (self.boss.max_health // 2):
+            from minigame import HackingMiniGame
+            success = HackingMiniGame(self).run()
+            if not success:
+                # Make boss harder
+                self.boss.max_health *= 1.5
+                self.boss.health = self.boss.max_health
+                self.boss.shoot_interval *= 0.7
+            # Reset health check
+            self.player.last_health_check = self.player.lives
 
     def draw_pause_menu(self):
         menu_options = ["Resume", "Save Game", "Return to Menu"]
@@ -1338,19 +1375,20 @@ class Boss:
         self.speed = 3
         self.health = 100
         self.max_health = 100
-        self.shoot_interval = 1.0
+        self.shoot_interval = 0.1
         self.last_shot_time = 0
         self.animation_interval = 0.5
         self.last_animation_time = 0
         self.current_image = self.image1
         self.direction = 1  # 1 for right, -1 for left
         self.game = game
-        self.attack_phase = 1
-        self.last_phase_change = 0
-        self.charge_cooldown = 0
-        self.virus_images = [pygame.image.load(f"assets/virus_{i}.png") for i in range(1,4)]
-        self.current_virus_frame = 0
-        self.last_frame_update = 0
+        self.phases = [
+            {"health_range": (70, 100), "move_speed": 3, "attack": "spread"},
+            {"health_range": (30, 69), "move_speed": 4, "attack": "circle"},
+            {"health_range": (0, 29), "move_speed": 5, "attack": "mixed"}
+        ]
+        self.current_phase = 0
+        self.virus_bullets = []
 
     def load_and_scale_image(self, filename, size):
         try:
@@ -1361,89 +1399,123 @@ class Boss:
             quit()
 
     def update(self):
-        # Enhanced movement
-        self.x += self.speed * self.direction * (1.5 if self.health < 50 else 1)
+        self.spread_attack() 
+        self.update_phase()
+        self.attack_pattern()
+        self.update_virus_bullets()
+        self.x += self.speed * self.direction
         if self.x <= 0 or self.x + self.width >= self.game.screen_width:
             self.direction *= -1
-            if self.health < 30:
-                self.speed *= 1.2
 
-        # Phase management
-        if self.health <= 50 and self.attack_phase == 1:
-            self.attack_phase = 2
-            self.speed *= 1.5
-            self.last_phase_change = time.time()
-        
-        # Attack patterns
         current_time = time.time()
-        if current_time - self.last_shot_time >= self.shoot_interval:
-            if self.attack_phase == 1:
-                self.phase_one_attack()
-            else:
-                self.phase_two_attack()
-            self.last_shot_time = current_time
+        if current_time - self.last_animation_time >= self.animation_interval:
+            self.current_image = self.image2 if self.current_image == self.image1 else self.image1
+            self.last_animation_time = current_time
 
-        # Charge attack
-        if self.health < 70 and current_time - self.charge_cooldown > 10:
-            self.charge_attack()
-            self.charge_cooldown = current_time
-
-        # Update virus animation
-        if current_time - self.last_frame_update > 0.1:
-            self.current_virus_frame = (self.current_virus_frame + 1) % 3
-            self.last_frame_update = current_time
-
-        # Draw boss
         self.game.screen.blit(self.current_image, (self.x, self.y))
         self.draw_health_bar()
+
+        if current_time - self.last_shot_time >= self.shoot_interval:
+            self.game.bullet_manager.add_boss_bullet(self.x + self.width // 2, self.y + self.height)
+            self.last_shot_time = current_time
+
         return self.game.bullet_manager.check_player_hit_by_boss_bullet()
-    
-    def phase_one_attack(self):
-        # Spread shot pattern
-        for angle in range(-30, 31, 15):
-            self.game.bullet_manager.add_boss_bullet(
-                self.x + self.width//2,
-                self.y + self.height,
-                angle=math.radians(angle),
-                bullet_type="virus"
-            )
 
-    def phase_two_attack(self):
-        # Targeted homing shots
-        player_center_x = self.game.player.x + self.game.player.width/2
-        angle = math.atan2(
-            (self.game.player.y - self.y) + 50,  # Lead target
-            (player_center_x - (self.x + self.width/2))
-        )
-        self.game.bullet_manager.add_boss_bullet(
-            self.x + self.width//2,
-            self.y + self.height,
-            angle=angle,
-            bullet_type="homing"
-        )
-
-    def charge_attack(self):
-        # Charge towards player position
-        target_x = self.game.player.x
-        self.direction = 1 if target_x > self.x else -1
-        self.speed *= 2
-        pygame.time.set_timer(pygame.USEREVENT + 2, 1000)  # Reset speed after 1sec
-
-    def create_virus_bullet(self, x, y):
-        # Create cluster explosion
-        for angle in range(0, 360, 45):
-            self.game.bullet_manager.add_boss_bullet(
-                x, y,
-                angle=math.radians(angle),
-                bullet_type="virus",
-                size=5,
-                speed=3
-            )
+    def update_phase(self):
+        health_percent = (self.health / self.max_health) * 100
+        for i, phase in enumerate(self.phases):
+            if phase["health_range"][0] <= health_percent <= phase["health_range"][1]:
+                self.current_phase = i
+                self.speed = phase["move_speed"]
+                break
 
     def draw_health_bar(self):
         health_width = int(200 * (self.health / self.max_health))
         pygame.draw.rect(self.game.screen, self.game.RED, (self.game.screen_width // 2 - 100, 10, 200, 20))
         pygame.draw.rect(self.game.screen, self.game.GREEN, (self.game.screen_width // 2 - 100, 10, health_width, 20))
+
+    def attack_pattern(self):
+        phase = self.phases[self.current_phase]
+        if phase["attack"] == "spread":
+            self.spread_attack()
+        elif phase["attack"] == "circle":
+            self.circle_attack()
+        elif phase["attack"] == "mixed":
+            if random.random() < 0.3:
+                self.virus_attack()
+    
+    def spread_attack(self):
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.shoot_interval:
+            return  
+
+        self.last_shot_time = current_time  # Reset cooldown timer
+
+        # Shoot a single bullet (not multiple in a line)
+        angle = random.choice([-25, -15, -5, 5, 15, 25])  # Random spread
+        rad = math.radians(angle)
+        dx = math.sin(rad) * 2.5
+        dy = math.cos(rad) * 3
+
+        self.game.bullet_manager.add_boss_bullet(self.x + self.width//2, self.y + self.height, dx, dy)
+        
+    def circle_attack(self):
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.shoot_interval:
+            return  
+
+        self.last_shot_time = current_time  # Reset cooldown
+
+        angle = random.randint(0, 360)  
+        rad = math.radians(angle)
+
+        self.game.bullet_manager.add_boss_bullet(
+            self.x + self.width//2,
+            self.y + self.height,
+            dx=math.cos(rad)*3,
+            dy=math.sin(rad)*3
+        )
+
+    def line_attack(self):
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.shoot_interval:
+            return  
+
+        self.last_shot_time = current_time  # Reset cooldown timer
+
+
+        self.game.bullet_manager.add_boss_bullet(self.x + self.width//2, self.y + self.height, 0, 4)
+
+    def virus_attack(self):
+        # Create exploding virus bullet
+        virus = [
+            self.x + self.width//2,
+            self.y + self.height,
+            0,  # dx
+            3,  # dy
+            True  # active
+        ]
+        self.virus_bullets.append(virus)
+        
+    def update_virus_bullets(self):
+        for bullet in self.virus_bullets[:]:
+            if bullet[4]:  # Active
+                bullet[0] += bullet[2]
+                bullet[1] += bullet[3]
+                if bullet[1] > self.game.screen_height:
+                    self.virus_bullets.remove(bullet)
+                elif random.random() < 0.02:  # Explode
+                    self.explode_virus(bullet)
+                    bullet[4] = False
+                    
+    def explode_virus(self, bullet):
+        for _ in range(8):
+            angle = random.uniform(0, 2*math.pi)
+            self.game.bullet_manager.add_boss_bullet(
+                bullet[0], bullet[1],
+                dx=math.cos(angle)*4,
+                dy=math.sin(angle)*4
+            )
 
     def check_hit_by_player(self):
         for bullet in self.game.bullet_manager.player_bullets:
@@ -1490,7 +1562,7 @@ class EnemyManager:
             if self.game.level < self.game.total_levels:
                 self.game.level += 1
                 self.game.level_up_sound.play()
-                self.game.display_feedback("Level " + str(self.game.level - 1) + " Complete!", self.game.GREEN)
+                self.game.display_feedback(f"Level {self.game.level - 1} Complete!", self.game.GREEN)
                 self.game.clear_level()
                 self.create_enemies()
             else:
@@ -1515,6 +1587,7 @@ class EnemyManager:
                 enemy[1] += 20
             self.direction *= -1
 
+
     def draw(self):
         for enemy in self.enemies:
             self.game.screen.blit(self.enemy_image, (enemy[0], enemy[1]))
@@ -1538,8 +1611,6 @@ class BulletManager:
         self.game = game
         self.angle = math.radians(20)
         self.triple_shot = False
-        self.virus_bullets = []
-        self.homing_bullets = []
 
     def add_player_bullet(self, x, y):
         if self.triple_shot:
@@ -1555,74 +1626,11 @@ class BulletManager:
     def add_enemy_bullet(self, x, y):
         self.enemy_bullets.append([x, y])
 
-    def add_boss_bullet(self, x, y, angle=0, bullet_type="normal", size=10, speed=5):
-        if bullet_type == "virus":
-            self.virus_bullets.append({
-                "x": x,
-                "y": y,
-                "angle": angle,
-                "size": size,
-                "speed": speed,
-                "create_time": time.time()
-            })
-        elif bullet_type == "homing":
-            self.homing_bullets.append({
-                "x": x,
-                "y": y,
-                "angle": angle,
-                "size": size,
-                "speed": speed,
-                "create_time": time.time()
-            })
-        else:
-            self.boss_bullets.append([x, y])
-            
-    def update_boss_bullets(self):
-        # Update virus bullets with animation and splitting
-        for bullet in self.virus_bullets[:]:
-            bullet["x"] += bullet["speed"] * math.sin(bullet["angle"])
-            bullet["y"] += bullet["speed"] * math.cos(bullet["angle"])
-            
-            # Draw animated virus bullet
-            frame = self.game.boss.virus_images[self.game.boss.current_virus_frame]
-            self.game.screen.blit(frame, (bullet["x"], bullet["y"]))
-            
-            # Split into smaller bullets after time or collision
-            if time.time() - bullet["create_time"] > 2:
-                self.create_virus_cluster(bullet)
-                self.virus_bullets.remove(bullet)
-
-        # Update homing bullets
-        for bullet in self.homing_bullets[:]:
-            # Calculate new angle towards player
-            player_center = (self.game.player.x + self.game.player.width/2,
-                           self.game.player.y + self.game.player.height/2)
-            dx = player_center[0] - bullet["x"]
-            dy = player_center[1] - bullet["y"]
-            target_angle = math.atan2(dy, dx)
-            
-            # Smoothly adjust angle
-            bullet["angle"] += (target_angle - bullet["angle"]) * 0.1
-            
-            # Update position
-            bullet["x"] += bullet["speed"] * math.cos(bullet["angle"])
-            bullet["y"] += bullet["speed"] * math.sin(bullet["angle"])
-            
-            # Draw homing bullet
-            pygame.draw.circle(self.game.screen, self.game.ORANGE,
-                             (int(bullet["x"]), int(bullet["y"])), bullet["size"])
-
-    def create_virus_cluster(self, parent_bullet):
-        if parent_bullet["size"] > 3:
-            for angle in range(0, 360, 90):
-                self.virus_bullets.append({
-                    "x": parent_bullet["x"],
-                    "y": parent_bullet["y"],
-                    "angle": math.radians(angle),
-                    "size": parent_bullet["size"] - 2,
-                    "speed": parent_bullet["speed"] + 1,
-                    "create_time": time.time()
-                })
+    def add_boss_bullet(self, x, y, dx=0, dy=3):
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)) or not isinstance(dx, (int, float)) or not isinstance(dy, (int, float)):
+            print("WARNING: Skipping invalid boss bullet:", [x, y, dx, dy])
+            return  # Don't add invalid bullets
+        self.boss_bullets.append([x, y, dx, dy])  # Store bullets as lists
 
     def update_player_bullets(self, draw_only=False):
         bullets_to_remove = []
@@ -1663,45 +1671,19 @@ class BulletManager:
                     self.player_bullets.remove(bullet)
 
     def update_enemy_bullets(self, draw_only=False):
-        for bullet in self.enemy_bullets[:]:
-            if not draw_only:
-                bullet[1] += self.enemy_bullet_speed
-            pygame.draw.rect(self.game.screen, self.game.RED, (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
-            if not draw_only and bullet[1] > self.game.screen_height:
-                self.enemy_bullets.remove(bullet)
-            if self.game.player.invulnerable and \
-               self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
-               self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
-                self.enemy_bullets.remove(bullet)  # Bullet is removed if it hits the shield
         for bullet in self.boss_bullets[:]:
+            if not isinstance(bullet, list) or len(bullet) < 4:
+                print("WARNING: Skipping malformed boss bullet:", bullet)
+                continue  # Skip invalid bullets
+
             if not draw_only:
-                bullet[1] += self.enemy_bullet_speed * 2  # Boss bullets are faster
+                bullet[0] += bullet[2]  # Move horizontally
+                bullet[1] += bullet[3]  # Move vertically
+        
             pygame.draw.rect(self.game.screen, self.game.YELLOW, (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
+
             if not draw_only and bullet[1] > self.game.screen_height:
                 self.boss_bullets.remove(bullet)
-            # Check if boss bullet hits the player's shield
-            if self.game.player.invulnerable and \
-               self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and \
-               self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height:
-                self.boss_bullets.remove(bullet)  # Bullet is removed if it hits the shield
-
-    def check_collisions(self):
-        # Enhanced collision detection for new bullet types
-        for bullet in self.virus_bullets[:]:
-            if self.check_player_collision(bullet["x"], bullet["y"], bullet["size"]):
-                self.create_virus_cluster(bullet)
-                self.virus_bullets.remove(bullet)
-                return True
-                
-        for bullet in self.homing_bullets[:]:
-            if self.check_player_collision(bullet["x"], bullet["y"], bullet["size"]):
-                self.homing_bullets.remove(bullet)
-                return True
-
-    def check_player_collision(self, x, y, size):
-        player = self.game.player
-        return (player.x < x < player.x + player.width and 
-                player.y < y < player.y + player.height)
 
     def check_player_hit(self):
         for bullet in self.enemy_bullets[:]:
@@ -1718,13 +1700,20 @@ class BulletManager:
 
     def check_player_hit_by_boss_bullet(self):
         for bullet in self.boss_bullets[:]:
-            if (self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and 
+            if not isinstance(bullet, list) or len(bullet) < 4:
+                print("WARNING: Skipping invalid bullet:", bullet)
+                continue  # Skip malformed bullets
+        
+            # Access bullet as a list
+            if (self.game.player.x < bullet[0] < self.game.player.x + self.game.player.width and
                 self.game.player.y < bullet[1] < self.game.player.y + self.game.player.height):
                 if not self.game.player.invulnerable:
                     self.boss_bullets.remove(bullet)
-                    self.game.last_hit_time = time.time()
                     return True
         return False
+
+
+
 
 class PowerUpManager:
     def __init__(self, game):
@@ -1820,7 +1809,6 @@ class PowerUpManager:
         self.game.bullet_manager.triple_shot = False  # Disable TripleShot
         self.game.player.invulnerable = False  
 
-
 def main():
     game = Game()
     while True:
@@ -1828,3 +1816,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
