@@ -2,8 +2,8 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 def reset_leaderboard():
-    username = input("Enter your username: ")
-    password = input("Enter your password: ")
+    username = input("Enter the username: ")
+    password = input("Enter the password: ")
 
     url = 'https://5269989.pythonanywhere.com/delete_all_scores'
     
