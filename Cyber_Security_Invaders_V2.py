@@ -1,6 +1,3 @@
-###CURRENT ISSUES 
-#Lots
-
 import pygame
 import random
 import time
@@ -261,6 +258,7 @@ class Game:
         self.bg_animation_interval = 1  # Change background every 0.2 seconds
 
     def start_display_thread(self):
+        self.display_running = True  # Initialize the flag
         self.display_thread = threading.Thread(target=self.update_7seg_display)
         self.display_thread.daemon = True
         self.display_thread.start()
@@ -281,28 +279,28 @@ class Game:
         digit_pins = [D1, D2, D3, D4]
         try:
             while self.display_running:
-                # Atomic score swap
-                if self.display_update_flag:
-                    with self.display_lock:
-                        self.display_score_front = self.display_score_back
-                        self.display_update_flag = False
-                
-                digits = f"{self.display_score_front:04d}"
-                
+                with self.display_lock:
+                    current_score = self.display_score_front
+                digits = f"{current_score:04d}"
+            
                 for i in range(4):
-                    # Activate digit and set segments
+                    # Activate the current digit
                     GPIO.output(digit_pins[i], GPIO.HIGH)
                     segments = digit_to_segments[digits[i]]
-                    GPIO.output([SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, 
-                                SEGMENT_E, SEGMENT_F, SEGMENT_G], 
-                              [GPIO.HIGH if s else GPIO.LOW for s in segments])
+                    # Set each segment
+                    GPIO.output(SEGMENT_A, GPIO.HIGH if segments[0] else GPIO.LOW)
+                    GPIO.output(SEGMENT_B, GPIO.HIGH if segments[1] else GPIO.LOW)
+                    GPIO.output(SEGMENT_C, GPIO.HIGH if segments[2] else GPIO.LOW)
+                    GPIO.output(SEGMENT_D, GPIO.HIGH if segments[3] else GPIO.LOW)
+                    GPIO.output(SEGMENT_E, GPIO.HIGH if segments[4] else GPIO.LOW)
+                    GPIO.output(SEGMENT_F, GPIO.HIGH if segments[5] else GPIO.LOW)
+                    GPIO.output(SEGMENT_G, GPIO.HIGH if segments[6] else GPIO.LOW)
+                    # Hold the digit for a short time
                     time.sleep(0.001)
+                    # Deactivate the digit
                     GPIO.output(digit_pins[i], GPIO.LOW)
-                    
         except KeyboardInterrupt:
-            GPIO.cleanup()
-                
-        except KeyboardInterrupt:
+            self.display_running = False
             GPIO.cleanup()
 
     def display_changed_segments(self, number):
@@ -326,12 +324,10 @@ class Game:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
-        with self.display_lock:
-            new_score = max(0, self.score + points)
-            if new_score != self.score:
-                self.score = new_score
-                self.display_score_back = new_score
-                self.display_update_flag = True
+        with self.display_lock:  # Ensure atomic update
+            self.score = max(0, self.score + points)
+            self.display_score_back = self.score
+            self.display_update_flag = True
             
     def __del__(self):
         if is_raspberry_pi:
@@ -342,6 +338,7 @@ class Game:
     def main_game_loop(self):
         self.change_music(self.level_music)  # Start level music
         self.start_time = time.time()
+        minigamecompleted = False
         last_score_update_time = self.start_time
         score_paused = False
         while not self.game_over:
@@ -374,9 +371,13 @@ class Game:
                 self.paused = not self.paused
             self.player.check_invulnerability()
             if self.boss_fight:
-                self.check_minigame_trigger()
-                player_hit = self.boss.update()
-                self.boss.check_hit_by_player()
+                self.boss.update()
+                if minigamecompleted == False:
+                    self.check_minigame_trigger()
+                if self.boss_fight:
+                    player_hit = self.bullet_manager.check_player_hit_by_boss_bullet()
+                else:
+                    player_hit = self.bullet_manager.check_player_hit()
                 if player_hit:
                     score_paused = True
                     if not self.ask_cybersecurity_question():
@@ -385,7 +386,6 @@ class Game:
                         score_paused = False
                         if self.player.lives == 0:
                             self.game_over_screen()
-                            score_paused = False
                     else:
                         score_paused = False
 
@@ -409,6 +409,7 @@ class Game:
             self.player.draw()
             self.bullet_manager.update_player_bullets()
             self.bullet_manager.update_enemy_bullets()
+            self.bullet_manager.update_boss_bullets()
             self.draw_ui()
             # Handle 7-segment display
             if is_raspberry_pi:
@@ -421,15 +422,14 @@ class Game:
 
     def check_minigame_trigger(self):
         if self.boss.health <= (self.boss.max_health // 2):
-            from minigame import HackingMiniGame
             success = HackingMiniGame(self).run()
             if not success:
-                # Make boss harder
-                self.boss.max_health *= 1.5
-                self.boss.health = self.boss.max_health
-                self.boss.shoot_interval *= 0.7
-            # Reset health check
-            self.player.last_health_check = self.player.lives
+                # Enter rage mode
+                self.boss.shoot_interval *= 0.8  # 20% faster
+                self.boss.rage_mode = True
+                self.display_feedback("BOSS ENRAGED!", self.RED)
+            else:
+                self.display_feedback("Firewall Breached!", self.GREEN)
 
     def draw_pause_menu(self):
         menu_options = ["Resume", "Save Game", "Return to Menu"]
@@ -543,8 +543,37 @@ class Game:
                             return
                     elif event.key == pygame.K_ESCAPE:
                         return
+                    elif event.key == pygame.K_DELETE:
+                        if self.save_slots[selected_slot]:
+                            self.save_slots[selected_slot] = None
+                            try:
+                                with open('saves.json', 'w') as f:
+                                    json.dump(self.save_slots, f)
+                                self.display_feedback("Save deleted!", self.RED)
+                            except Exception as e:
+                                print(f"Error deleting save: {e}")
 
             pygame.display.flip()
+
+    def delete_all_saves(self):
+        confirm_text = self.font.render("Confirm delete ALL saves? (Y/N)", True, self.RED)
+        self.screen.blit(confirm_text, (self.screen_width//2 - 150, 400))
+        pygame.display.flip()
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_y:
+                        try:
+                            self.save_slots = [None, None, None]
+                            with open('saves.json', 'w') as f:
+                                json.dump(self.save_slots, f)
+                            self.display_feedback("All saves deleted!", self.RED)
+                            return
+                        except Exception as e:
+                            print(f"Error deleting saves: {e}")
+                    elif event.key in [pygame.K_n, pygame.K_ESCAPE]:
+                        return
 
     def draw_ui(self):
         lives_text = self.font.render(f"Lives: {self.player.lives}", True, self.WHITE)
@@ -906,7 +935,7 @@ class Game:
             'boss_health': self.boss.health if self.boss_fight else None,
             'player_bullets': [(b[0], b[1], b[2], b[3]) for b in self.bullet_manager.player_bullets],
             'enemy_bullets': [(b[0], b[1]) for b in self.bullet_manager.enemy_bullets],
-            'boss_bullets': [(b[0], b[1]) for b in self.bullet_manager.boss_bullets],
+            'boss_bullets': [(b[0], b[1], b[2], b[3]) for b in self.bullet_manager.boss_bullets],
             'power_ups': {
                 'active': self.power_ups.power_up_active,
                 'type': self.power_ups.current_power_up,
@@ -1005,7 +1034,11 @@ class Game:
         # Restore bullets
         self.bullet_manager.player_bullets = [[b[0], b[1], b[2], b[3]] for b in save_data['player_bullets']]
         self.bullet_manager.enemy_bullets = [[b[0], b[1]] for b in save_data['enemy_bullets']]
-        self.bullet_manager.boss_bullets = [[b[0], b[1]] for b in save_data['boss_bullets']]
+        self.bullet_manager.boss_bullets = [
+            [b[0], b[1], b[2], b[3]] 
+            for b in save_data['boss_bullets']
+            if len(b) == 4 and all(isinstance(v, (int, float)) for v in b)
+        ]
 
         # Restore power-ups
         power_up_data = save_data['power_ups']
@@ -1399,10 +1432,6 @@ class Boss:
             quit()
 
     def update(self):
-        self.spread_attack() 
-        self.update_phase()
-        self.attack_pattern()
-        self.update_virus_bullets()
         self.x += self.speed * self.direction
         if self.x <= 0 or self.x + self.width >= self.game.screen_width:
             self.direction *= -1
@@ -1412,14 +1441,10 @@ class Boss:
             self.current_image = self.image2 if self.current_image == self.image1 else self.image1
             self.last_animation_time = current_time
 
+        # Add this line to actually draw the boss
         self.game.screen.blit(self.current_image, (self.x, self.y))
         self.draw_health_bar()
-
-        if current_time - self.last_shot_time >= self.shoot_interval:
-            self.game.bullet_manager.add_boss_bullet(self.x + self.width // 2, self.y + self.height)
-            self.last_shot_time = current_time
-
-        return self.game.bullet_manager.check_player_hit_by_boss_bullet()
+        self.attack_pattern()  # Keep attack pattern logic
 
     def update_phase(self):
         health_percent = (self.health / self.max_health) * 100
@@ -1428,6 +1453,17 @@ class Boss:
                 self.current_phase = i
                 self.speed = phase["move_speed"]
                 break
+
+    def draw(self):
+        image = self.current_image.copy()
+        if self.rage_mode:
+            # Add red tint
+            color_overlay = pygame.Surface(image.get_size(), pygame.SRCALPHA)
+            color_overlay.fill((255, 0, 0, 50))  # Semi-transparent red
+            image.blit(color_overlay, (0, 0))
+    
+        self.game.screen.blit(image, (self.x, self.y))
+        self.draw_health_bar()
 
     def draw_health_bar(self):
         health_width = int(200 * (self.health / self.max_health))
@@ -1479,12 +1515,16 @@ class Boss:
     def line_attack(self):
         current_time = time.time()
         if current_time - self.last_shot_time < self.shoot_interval:
-            return  
+            return
 
-        self.last_shot_time = current_time  # Reset cooldown timer
-
-
-        self.game.bullet_manager.add_boss_bullet(self.x + self.width//2, self.y + self.height, 0, 4)
+        self.last_shot_time = current_time
+        # Add dx=0, dy=3 parameters
+        self.game.bullet_manager.add_boss_bullet(
+            self.x + self.width//2,
+            self.y + self.height,
+            dx=0,
+            dy=3
+        )
 
     def virus_attack(self):
         # Create exploding virus bullet
@@ -1587,7 +1627,6 @@ class EnemyManager:
                 enemy[1] += 20
             self.direction *= -1
 
-
     def draw(self):
         for enemy in self.enemies:
             self.game.screen.blit(self.enemy_image, (enemy[0], enemy[1]))
@@ -1627,10 +1666,11 @@ class BulletManager:
         self.enemy_bullets.append([x, y])
 
     def add_boss_bullet(self, x, y, dx=0, dy=3):
-        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)) or not isinstance(dx, (int, float)) or not isinstance(dy, (int, float)):
-            print("WARNING: Skipping invalid boss bullet:", [x, y, dx, dy])
-            return  # Don't add invalid bullets
-        self.boss_bullets.append([x, y, dx, dy])  # Store bullets as lists
+        # Ensure all parameters are valid numbers
+        if all(isinstance(v, (int, float)) for v in [x, y, dx, dy]):
+            self.boss_bullets.append([x, y, dx, dy])
+        else:
+            print(f"Invalid boss bullet parameters: {[x, y, dx, dy]}")
 
     def update_player_bullets(self, draw_only=False):
         bullets_to_remove = []
@@ -1671,18 +1711,35 @@ class BulletManager:
                     self.player_bullets.remove(bullet)
 
     def update_enemy_bullets(self, draw_only=False):
-        for bullet in self.boss_bullets[:]:
-            if not isinstance(bullet, list) or len(bullet) < 4:
-                print("WARNING: Skipping malformed boss bullet:", bullet)
-                continue  # Skip invalid bullets
-
+        # Changed from boss_bullets to enemy_bullets
+        for bullet in self.enemy_bullets[:]:  # THIS LINE WAS FIXED
             if not draw_only:
-                bullet[0] += bullet[2]  # Move horizontally
-                bullet[1] += bullet[3]  # Move vertically
+                # Move bullet downward
+                bullet[1] += self.enemy_bullet_speed
         
-            pygame.draw.rect(self.game.screen, self.game.YELLOW, (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
-
+            # Draw enemy bullet
+            pygame.draw.rect(self.game.screen, self.game.RED, 
+                            (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
+        
+            # Remove bullets that go off screen
             if not draw_only and bullet[1] > self.game.screen_height:
+                self.enemy_bullets.remove(bullet)
+                
+    def update_boss_bullets(self, draw_only=False):
+        for bullet in self.boss_bullets[:]:
+            if not draw_only:
+                # Move bullet using dx/dy values
+                bullet[0] += bullet[2]  # Update X with dx
+                bullet[1] += bullet[3]  # Update Y with dy
+
+            # Draw boss bullet
+            pygame.draw.rect(self.game.screen, self.game.YELLOW, 
+                            (bullet[0], bullet[1], self.bullet_width, 10))
+        
+            # Remove off-screen bullets
+            if not draw_only and (bullet[1] > self.game.screen_height or 
+                                bullet[0] < 0 or 
+                                bullet[0] > self.game.screen_width):
                 self.boss_bullets.remove(bullet)
 
     def check_player_hit(self):
@@ -1711,9 +1768,6 @@ class BulletManager:
                     self.boss_bullets.remove(bullet)
                     return True
         return False
-
-
-
 
 class PowerUpManager:
     def __init__(self, game):
