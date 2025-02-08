@@ -108,7 +108,7 @@ response = requests.post("https://5269989.pythonanywhere.com/submit_score")
 | Missing dependencies| `pip install -r requirements.txt`         |
 | GPIO permissions    | Run with `sudo`                            |
 | Display not working | Check wiring & pin assignments            |
-| Server unavailable  | Play in offline mode                      |
+| Leaderboard unavailable  | Server Down                     |
 
 ## 📜 License
 MIT License - See LICENSE for details
