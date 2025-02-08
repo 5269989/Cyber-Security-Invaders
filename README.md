@@ -53,14 +53,14 @@ pip install RPi.GPIO
 
 ## 🎮 Controls
 
-| Action              | Keyboard       | RPi GPIO    |
-|---------------------|----------------|-------------|
-| Move Left           | ← Arrow        | -           |
-| Move Right          | → Arrow        | -           |
-| Shoot               | Spacebar       | -           |
-| Pause/Menu          | ESC            | Button 17   |
-| Menu Navigation     | ↑/↓ Arrows     | Rotary      |
-| Confirm Selection   | Enter          | Button 27   |
+| Action              | Keyboard       |
+|---------------------|----------------|
+| Move Left           | ← Arrow        | 
+| Move Right          | → Arrow        | 
+| Shoot               | Spacebar       | 
+| Pause/Menu          | ESC            |  
+| Menu Navigation     | ↑/↓ Arrows     |  
+| Confirm Selection   | Enter          | 
 
 ## 🧠 Cybersecurity Features
 
