@@ -11,12 +11,11 @@
 ## 🚀 New Features & Enhancements
 
 ### 🕹️ Gameplay Additions
-- **Boss Battles** 👾 - Face off against massive final bosses at the end of each level
+- **Boss Battles** 👾 - Face off against massive final bosse at the end of the base levels
 - **Power-Up System** ⚡  
-  - *Laser Beams*: Super-charged attacks  
+  - *Laser Beams*: Super-charged attack  
   - *Energy Shields*: Temporary invulnerability  
   - *Triple Shot*: Triple your firepower  
-  - *Score Multipliers*: Rack up bonus points  
 - **7-Segment Display Integration** 🔢 (Raspberry Pi) - Real-time score tracking  
 - **Dual LED Feedback** 💡 (RPi) - Green/red LEDs for correct/incorrect answers
 
