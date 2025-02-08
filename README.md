@@ -92,7 +92,7 @@ if is_raspberry_pi:
 
 ## 📊 Leaderboard System
 
-## # Cloud-based score tracking
+# # Cloud-based score tracking
 ```python
 response = requests.post("https://5269989.pythonanywhere.com/submit_score")
 ```
