@@ -1,9 +1,9 @@
-﻿import pygame
+import pygame
 import math
 import random
 import time
 import os
-from minigame import HackingMiniGame
+from scripts.game_logic.minigame import HackingMiniGame
 
 class Boss:
     def __init__(self, game):
