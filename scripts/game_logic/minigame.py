@@ -106,7 +106,7 @@ class HackingMiniGame:
         input_rect = input_text.get_rect(center=(self.screen_width // 2, start_y + (self.grid_size * cell_size) + 50))
         self.screen.blit(input_text, input_rect)
         
-        # Input status – using dynamic max letters
+        # Input status â€“ using dynamic max letters
         status_color = self.game.RED if len(self.input_buffer) >= len(self.correct_word) else self.game.WHITE
         status_text = self.game.font.render(f"Letters: {len(self.input_buffer)}/{len(self.correct_word)}", True, status_color)
         self.screen.blit(status_text, (self.screen_width // 2 - 100, input_rect.bottom + 10))
