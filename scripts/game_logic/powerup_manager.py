@@ -32,10 +32,10 @@ class PowerUpManager:
                 self.is_first_level = False
         # Check if a new level has started (excluding first level)
         elif self.game.level != self.last_level_check:
-            self.power_ups.clear()  # Clear old power-ups
-            self.spawn_power_up()  # Spawn new power-up
-            self.spawn_time = current_time  # Reset the timer
-            self.last_level_check = self.game.level  # Update the last checked level
+            self.power_ups.clear()  
+            self.spawn_power_up()  
+            self.spawn_time = current_time  
+            self.last_level_check = self.game.level 
         # Normal spawn conditions for non-boss levels when no power-up is active
         if not self.game.boss_fight and not self.power_up_active:
             if not self.power_ups and current_time - self.spawn_time >= self.spawn_interval:
@@ -84,19 +84,16 @@ class PowerUpManager:
         self.game.power_up_sound.play()
 
     def pause_powerups(self):
-        """Freeze the powerup timer when the game is paused."""
         if self.power_up_active and self.paused_time is None:
             # Record the time at which the game was paused.
             self.paused_time = time.time()
 
     def resume_powerups(self):
-        """Adjust the powerup timer to resume as if paused time never passed."""
         if self.power_up_active and self.paused_time is not None:
             # Calculate how long the game was paused.
             paused_duration = time.time() - self.paused_time
             # Push the expiration time further by the paused duration.
             self.power_up_timer += paused_duration
-            # Clear the paused time flag.
             self.paused_time = None
 
     def reset_power_up(self):
