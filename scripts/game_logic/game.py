@@ -41,13 +41,12 @@ class Game:
         self.score = 5000
         self.power_ups = PowerUpManager(self)
         self.paused = False
-        self.save_slots = [None, None, None]  # Stores 3 save games
+        self.save_slots = [None, None, None]  
         self.selected_save_slot = 0
         self.loaded_from_menu = False
         self.save_name_input = ""
-        self.current_music = None  # Track currently playing music
-        self.save_slots = [None, None, None]  # Default empty save slots
-        self.load_saves_from_file()  # Load saves when game starts
+        self.current_music = None 
+        self.load_saves_from_file()  
         self.init_gpio()
         self.cheat_codes = {
             "D4A52B11": "invincible",
@@ -60,8 +59,8 @@ class Game:
         
         
         if self.is_raspberry_pi:
-            self.display_score_front = 5000  # Value shown on display
-            self.display_score_back = 5000   # Buffered updates
+            self.display_score_front = 5000 
+            self.display_score_back = 5000   
             self.display_update_flag = False
             self.display_lock = threading.Lock()
             self.start_display_thread()
@@ -115,7 +114,7 @@ class Game:
         self.bullet_manager = BulletManager(self)
         self.power_ups = PowerUpManager(self)
         
-        # Define cybersecurity questions here for direct access
+        # Cybersecurity questions
         self.cybersecurity_questions = [
             {"question": "What does 'HTTPS' stand for?",
              "options": ["A) Hypertext Transfer Protocol Standard", "B) Hypertext Transfer Protocol Secure", "C) High Transfer Protocol Secure"],
@@ -193,13 +192,12 @@ class Game:
 
             # Function to display a 4-digit number on the 7-segment display
             def display_number_on_7seg(number):
-                digits = str(number).zfill(4)  # Ensure the number is 4 digits long
+                digits = str(number).zfill(4)  
                 start_time = time.perf_counter()
                 for i, digit in enumerate(digits):
-                    # Select the appropriate digit to display
             
                     digit_pins = [D1, D2, D3, D4]
-                    GPIO.output(digit_pins[i], GPIO.HIGH)  # Activate current digit
+                    GPIO.output(digit_pins[i], GPIO.HIGH) 
             
                     # Turn on/off the segments based on the digit
                     segments = digit_to_segments[digit]
@@ -211,7 +209,6 @@ class Game:
                     GPIO.output(SEGMENT_F, GPIO.HIGH if segments[5] == 1 else GPIO.LOW)
                     GPIO.output(SEGMENT_G, GPIO.HIGH if segments[6] == 1 else GPIO.LOW)
             
-                    # Turn off other digits to avoid overlap
                     for j in range(4):
                         if j != i:
                             GPIO.output(digit_pins[j], GPIO.LOW)
@@ -243,7 +240,7 @@ class Game:
         # Check if music files exist before loading them
         for music_file in [self.menu_music, self.level_music, self.boss_music, self.game_over_music, self.boss_defeated_music]:
             if not os.path.exists(music_file):
-                print(f"🚨 Warning: Music file missing -> {music_file}")
+                print(f"Warning: Music file missing -> {music_file}")
 
         # Sound Effect Paths
         self.shoot_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "shoot.wav"))
@@ -254,7 +251,7 @@ class Game:
         self.power_up_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "power_up.wav"))
 
 
-        #Set volume (adjust as needed)
+        #Set volume 
         pygame.mixer.music.set_volume(0.8)
 
     def load_menu_background(self):
@@ -264,27 +261,27 @@ class Game:
             pygame.image.load("assets/backgrounds/menu_background2.png"),
             pygame.image.load("assets/backgrounds/menu_background3.png")
         ]
-        self.menu_background_index = 0  # Start with the first background
-        self.last_bg_update = time.time()  # Track time for animation
+        self.menu_background_index = 0 
+        self.last_bg_update = time.time()  
         self.bg_animation_interval = 1  # Change background every 0.2 seconds
 
     def start_display_thread(self):
-        self.display_running = True  # Initialize the flag
+        self.display_running = True 
         self.display_thread = threading.Thread(target=self.update_7seg_display)
         self.display_thread.daemon = True
         self.display_thread.start()
     
     def change_music(self, new_track):
         """Stops current music and plays a new track safely."""
-        if not os.path.exists(new_track):  # Check if file exists
+        if not os.path.exists(new_track):  
             print(f"Music file not found: {new_track}")  # Debugging info
-            return  # Exit function to prevent crash
+            return  
 
         if self.current_music != new_track:  # Avoid restarting the same track
             pygame.mixer.music.stop()
             pygame.mixer.music.load(new_track)
-            pygame.mixer.music.play(-1)  # Loop indefinitely
-            self.current_music = new_track  # Track current music
+            pygame.mixer.music.play(-1)  
+            self.current_music = new_track  
 
     def update_7seg_display(self):
         digit_pins = [D1, D2, D3, D4]
@@ -295,7 +292,6 @@ class Game:
                 digits = f"{current_score:04d}"
             
                 for i in range(4):
-                    # Activate the current digit
                     GPIO.output(digit_pins[i], GPIO.HIGH)
                     segments = digit_to_segments[digits[i]]
                     # Set each segment
@@ -308,7 +304,6 @@ class Game:
                     GPIO.output(SEGMENT_G, GPIO.HIGH if segments[6] else GPIO.LOW)
                     # Hold the digit for a short time
                     time.sleep(0.001)
-                    # Deactivate the digit
                     GPIO.output(digit_pins[i], GPIO.LOW)
         except KeyboardInterrupt:
             self.display_running = False
@@ -326,7 +321,7 @@ class Game:
         
     def display_digit(self, position, digit):
         digit_pins = [D1, D2, D3, D4]
-        GPIO.output(digit_pins[position], GPIO.HIGH)  # Activate current digit
+        GPIO.output(digit_pins[position], GPIO.HIGH) 
         segments = digit_to_segments[digit]
         for j, segment in enumerate([SEGMENT_A, SEGMENT_B, SEGMENT_C, SEGMENT_D, SEGMENT_E, SEGMENT_F, SEGMENT_G]):
             GPIO.output(segment, GPIO.HIGH if segments[j] == 1 else GPIO.LOW)
@@ -335,7 +330,7 @@ class Game:
                 GPIO.output(digit_pins[j], GPIO.LOW)
 
     def adjust_score(self, points):
-        with self.display_lock:  # Ensure atomic update
+        with self.display_lock:  
             self.score = max(0, self.score + points)
             self.display_score_back = self.score
             self.display_update_flag = True
@@ -375,10 +370,10 @@ class Game:
             current_time = time.time()
             elapsed_time = current_time - last_score_update_time
             if not score_paused:
-                if elapsed_time >= 1:  # Update score every second
+                if elapsed_time >= 1:  
                     self.score -= 25  # Deduct 25 points per second
                     self.score = max(0, self.score)  # Ensure score doesn't go below 0
-                    last_score_update_time = current_time  # Reset for next frame
+                    last_score_update_time = current_time  
             if keys[pygame.K_ESCAPE]:
                 self.paused = not self.paused
             self.player.check_invulnerability()
@@ -426,7 +421,7 @@ class Game:
             self.draw_ui()
             # Handle 7-segment display
             if self.is_raspberry_pi:
-                if self.score != self.display_score:  # If score has changed
+                if self.score != self.display_score: 
                     with self.lock:
                         self.display_score = self.score
                         self.display_update_event.set()
@@ -447,9 +442,8 @@ class Game:
     def draw_pause_menu(self):
         menu_options = ["Resume", "Save Game", "Return to Menu"]
 
-        selected_option = 0  # Track selected option
+        selected_option = 0  
         while self.paused:
-            # Draw game background first
             self.screen.fill(self.BLACK)
  
                 # Draw enemies or boss based on current game state
@@ -469,7 +463,7 @@ class Game:
             self.bullet_manager.update_enemy_bullets(draw_only=True)
             self.bullet_manager.update_boss_bullets(draw_only=True)
 
-             # *** Manually draw power-ups without updating them ***
+             # Manually draw power-ups without updating them 
             for power_up in self.power_ups.power_ups:
                 pygame.draw.circle(self.screen, self.BLUE, (int(power_up[0]), int(power_up[1])), 10)
         
@@ -496,7 +490,7 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        self.paused = False  # Exit pause menu on ESC
+                        self.paused = False  
                         return
                     elif event.key == pygame.K_DOWN:
                         selected_option = (selected_option + 1) % len(menu_options)
@@ -525,7 +519,6 @@ class Game:
             title = self.big_font.render("Select Save Slot", True, self.YELLOW)
             self.screen.blit(title, (self.screen_width//2 - title.get_width()//2, 50))
         
-            # Draw slots
             slot_y = 150
             for i in range(3):
                 slot_rect = pygame.Rect(200, slot_y, 800, 100)
@@ -542,7 +535,6 @@ class Game:
                 self.screen.blit(text_surf, (220, slot_y + 35))
                 slot_y += 120
 
-            # Handle input
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_DOWN:
@@ -551,11 +543,9 @@ class Game:
                         selected_slot = (selected_slot - 1) % 3
                     elif event.key == pygame.K_RETURN:
                         if self.save_slots[selected_slot] is None:
-                            # Show name input for new saves
                             self.get_save_name(selected_slot)
                             return
                         else:
-                            # Overwrite existing save
                             self.get_save_name(selected_slot)
                             return
                     elif event.key == pygame.K_ESCAPE:
@@ -614,35 +604,26 @@ class Game:
             power_up_name = self.font.render(self.power_ups.current_power_up.capitalize(), True, color)
             self.screen.blit(power_up_name, (self.screen_width // 2 - power_up_name.get_width() // 2, 40))
     
-        # Display score adjustments
         if hasattr(self, 'score_adjustment'):
             adjust_text = self.font.render(self.score_adjustment, True, self.RED if self.score_adjustment[0] == '-' else self.GREEN)
             self.screen.blit(adjust_text, (score_text.get_width() + 20, 40))
 
     def adjust_score(self, points):
-        self.score = max(0, self.score + points)  # Ensure score is non-negative
+        self.score = max(0, self.score + points)  
     
         if points != 0:
-            self.score_adjustment = f"{points:+d}"  # Store the adjustment for display
+            self.score_adjustment = f"{points:+d}"  
             self.score_adjustment_time = time.time()
         
-            # Clear existing timer and set a new one
-            pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Clear existing timer
+            pygame.time.set_timer(pygame.USEREVENT + 1, 0)  
             pygame.time.set_timer(pygame.USEREVENT + 1, 2000)  
         
     def clear_bullets(self):
-        """
-        Clears all bullets from the game screen to allow a fresh start after answering a question or level completion.
-        """
         self.bullet_manager.player_bullets.clear()
         self.bullet_manager.enemy_bullets.clear()
         self.bullet_manager.boss_bullets.clear()
 
     def ask_cybersecurity_question(self):
-        """
-        Displays a cybersecurity question and handles user input for answering.
-        Returns True if the answer is correct, False otherwise.
-        """
         # Ensure there are available questions
         if self.questions_asked >= self.question_limit or not self.cybersecurity_questions:
             return False
@@ -664,14 +645,12 @@ class Game:
         selected_index = 0
         running = True
         while running:
-            # Handle events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     quit()
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
-                        # Check the selected answer
                         selected_answer = chr(pygame.K_a + selected_index).upper()
                         if selected_answer == correct_answer:
                             self.correct_answer_sound.play()
@@ -688,10 +667,8 @@ class Game:
                     elif event.key == pygame.K_DOWN:
                         selected_index = (selected_index + 1) % len(options)
 
-            # Render the question and options
             self.screen.fill(self.BLACK)
 
-            # Render the question
             question_lines = self.wrap_text(question, self.big_font, self.screen_width - 40)
             total_text_height = len(question_lines) * self.big_font.get_linesize()
             question_y_start = self.screen_height // 3 - total_text_height // 2
@@ -699,24 +676,18 @@ class Game:
                 question_text = self.big_font.render(line, True, self.WHITE)
                 self.screen.blit(question_text, (self.screen_width // 2 - question_text.get_width() // 2, question_y_start + i * self.big_font.get_linesize()))
 
-            # Render the options
             options_y_start = self.screen_height // 2
             for i, option in enumerate(options):
                 color = self.GREEN if i == selected_index else self.WHITE
                 option_text = self.font.render(option, True, color)
                 self.screen.blit(option_text, (self.screen_width // 2 - option_text.get_width() // 2, options_y_start + i * 40))
 
-            # Render the instruction
             instruction_text = self.font.render("Use UP/DOWN to select, ENTER to confirm.", True, self.YELLOW)
             self.screen.blit(instruction_text, (self.screen_width // 2 - instruction_text.get_width() // 2, self.screen_height - 50))
 
-            # Update the display
             pygame.display.flip()
 
     def wrap_text(self, text, font, max_width):
-        """
-        Splits text into lines that fit within a given width.
-        """
         words = text.split(' ')
         lines = []
         current_line = ''
@@ -752,7 +723,6 @@ class Game:
 
     def boss_fight_splash_screen(self):
         self.change_music(self.boss_music)  # Start boss music
-        # Clear player bullets and deactivate power-ups
         self.clear_bullets()
         self.power_ups.reset_power_up()
         self.boss.health = self.boss.max_health
@@ -793,10 +763,10 @@ class Game:
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
-                    # Only accept the key if the cooldown period has passed.
+                    # I added a cooldown so user doesn't accidentally press off the splash screens
                     if pygame.time.get_ticks() - start_time >= cooldown:
                         return
-            pygame.time.wait(10)  # Prevent a busy loop
+            pygame.time.wait(10)  
 
     def show_menu(self):
         menu_options = ["New Game", "Load Game", "Leaderboard", "Instructions", "Exit"]
@@ -808,17 +778,15 @@ class Game:
         while True:
             current_time = time.time()
         
-            #Animate the background every 0.2 seconds**
+            #Animate the background every 0.2s
             if current_time - self.last_bg_update >= self.bg_animation_interval:
                 self.menu_background_index = (self.menu_background_index + 1) % len(self.menu_backgrounds)
                 self.last_bg_update = current_time
-        
-            #Draw the animated background
+
             self.screen.blit(self.menu_backgrounds[self.menu_background_index], (0, 0))
 
             # Title text
             self.screen.blit(self.title_image, (self.screen_width // 2 - self.title_image.get_width() // 2, 50))
-
 
             # Draw menu items
             for i, option in enumerate(menu_options):
@@ -829,7 +797,6 @@ class Game:
 
             pygame.display.flip()
 
-            # Handle input
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_DOWN:
@@ -857,24 +824,21 @@ class Game:
             title = self.big_font.render("Load Game", True, self.YELLOW)
             self.screen.blit(title, (self.screen_width//2 - title.get_width()//2, 50))
         
-            # Draw slots with proper empty slot handling
+
             slot_height = 100
             start_y = 150
             for i in range(3):
-                # Create slot_rect FIRST
                 slot_rect = pygame.Rect(
-                    200,  # x
-                    start_y + i*(slot_height + 20),  # y
-                    800,  # width
-                    slot_height  # height
+                    200,  
+                    start_y + i*(slot_height + 20),  
+                    800,  
+                    slot_height  
                 )
                 color = self.GREEN if i == selected_slot else self.WHITE
             
-                # Always draw the slot background
                 pygame.draw.rect(self.screen, color, slot_rect, 2)
             
                 if self.save_slots[i]:
-                    # Draw save info for occupied slot
                     save = self.save_slots[i]
                     text_lines = [
                         f"{save['name']}",
@@ -889,11 +853,10 @@ class Game:
                     empty_text = self.font.render("Empty Slot!", True, color)
                     self.screen.blit(empty_text, (slot_rect.x + 20, slot_rect.y + 40))
         
-            # Add return instruction
+            # Add instructions
             return_text = self.font.render("Press ESC to return to menu | DEL to delete save", True, self.GREEN)
             self.screen.blit(return_text, (self.screen_width//2 - return_text.get_width()//2, 550))
         
-            # Handle input
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_DOWN:
@@ -920,14 +883,13 @@ class Game:
             pygame.display.flip()
             
     def confirm_delete_save(self):
-        # Display a confirmation screen
+        # Confirmation screen
         self.screen.fill(self.BLACK)
         confirm_text = self.big_font.render("Confirm delete save? (Y/N)", True, self.WHITE)
         self.screen.blit(confirm_text, (self.screen_width//2 - confirm_text.get_width()//2,
                                         self.screen_height//2 - confirm_text.get_height()//2))
         pygame.display.flip()
     
-        # Wait for user input
         waiting = True
         while waiting:
             for event in pygame.event.get():
@@ -938,14 +900,11 @@ class Game:
                         return False
                             
     def save_game(self, slot, name):
-        """Save all essential game states and force an update to the saves.json file."""
-        # Reload current saves from file to ensure we have the latest data
         current_saves = []
         if os.path.exists('saves.json'):
             try:
                 with open('saves.json', 'r') as f:
                     current_saves = json.load(f)
-                # Ensure we have exactly 3 slots, fill with None if necessary
                 current_saves = (current_saves + [None] * 3)[:3]
             except (json.JSONDecodeError, FileNotFoundError):
                 current_saves = [None, None, None]
@@ -983,14 +942,12 @@ class Game:
             'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         }
 
-        # Update the specific slot
         current_saves[slot] = game_state
 
         # Write back all slots to the file
         try:
             with open('saves.json', 'w') as f:
                 json.dump(current_saves, f)
-            # Update in-memory save slots to reflect the latest changes
             self.save_slots = current_saves
             self.display_feedback("Game Saved!", self.GREEN)
         except IOError as e:
@@ -1000,10 +957,8 @@ class Game:
     def get_save_name(self, slot):
         name = ""
         while True:
-            # Draw themed background
             self.screen.fill(self.BLACK)
-        
-            # Draw decorative border
+     
             pygame.draw.rect(self.screen, self.GREEN, (150, 150, 900, 300), 3)
 
             # Title text
@@ -1029,7 +984,7 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        return  # Return to save slot menu
+                        return  
                     elif event.key == pygame.K_RETURN:
                         if name.strip():
                             self.save_game(slot, name.strip())
@@ -1043,11 +998,10 @@ class Game:
             pygame.display.flip()
 
     def load_game(self, slot):
-        """Forces the game to reload exactly what is in saves.json to ensure consistency."""
         if os.path.exists('saves.json'):
             try:
                 with open('saves.json', 'r') as f:
-                    self.save_slots = json.load(f)  # Reload the entire save structure
+                    self.save_slots = json.load(f)  
             except (json.JSONDecodeError, FileNotFoundError) as e:
                 self.display_feedback(f"Error reading save file: {e}", self.RED)
                 return False
@@ -1055,14 +1009,14 @@ class Game:
             self.display_feedback("No save file found!", self.RED)
             return False
 
-        # **Ensure selected save slot exists and is not empty**
+        # Ensure selected save slot exists and is not empty
         if not self.save_slots or not self.save_slots[slot]:
             self.display_feedback("Empty Slot!", self.RED)
             return False
 
-        save_data = self.save_slots[slot]  # Load fresh data from file
+        save_data = self.save_slots[slot] 
 
-        # **CLEAR EVERYTHING BEFORE LOADING TO AVOID CROSSOVER ISSUES**
+        # CLEAR EVERYTHING BEFORE LOADING TO AVOID ISSUES
         self.reset_game_state()
 
         # Restore core state
@@ -1082,13 +1036,11 @@ class Game:
         # Restore enemies exactly as saved
         self.enemy_manager.enemies = save_data['enemies'] if save_data['enemies'] else []
         self.enemy_manager.direction = save_data['enemy_direction']
-        if not self.enemy_manager.enemies:
-            self.enemy_manager.create_enemies()  # **Only recreate enemies if missing from save**
 
         # Restore boss
         if self.boss_fight:
             self.boss.health = save_data['boss_health']
-            self.enemy_manager.enemies.clear() # Fixed issue when loading from save where eneimies would spawn
+            self.enemy_manager.enemies.clear() # Fixed issue when loading from save where enemies would spawn
             
 
         # Restore bullets
@@ -1107,7 +1059,6 @@ class Game:
         self.power_ups.power_ups = power_up_data['positions']
         self.power_ups.spawn_time = power_up_data['spawn_time']
         if power_up_data['active']:
-            # Calculate remaining time when paused
             self.power_ups.power_up_timer = time.time() + power_up_data['timer']
 
         self.display_feedback("Game Loaded!", self.GREEN)
@@ -1116,7 +1067,7 @@ class Game:
         
     def check_server_availability(self):
         try:
-            # Adding Basic Authentication with the username and password
+            # Changed to HTTPS and added Basic Authentication with the username and password
             response = requests.get("https://5269989.pythonanywhere.com/leaderboard", 
                                     timeout=5, 
                                     auth=HTTPBasicAuth('5269989', 'SAM'))
@@ -1146,7 +1097,7 @@ class Game:
     def show_leaderboard(self):
         self.create_loading_screen()  # Show loading screen
         try:
-            # Adding Basic Authentication with the username and password
+            # Changed to HTTPS and added Basic Authentication with the username and password
             response = requests.get("https://5269989.pythonanywhere.com/leaderboard", 
                                     timeout=5, 
                                     auth=HTTPBasicAuth('5269989', 'SAM'))
@@ -1191,14 +1142,13 @@ class Game:
         
         # Clear player bullets and deactivate power-ups
         self.clear_bullets()
-        self.power_ups.reset_power_up()  # Reset power-ups
-        self.power_ups.spawn_time = time.time()  # Reset spawn timer
+        self.power_ups.reset_power_up()  
+        self.power_ups.spawn_time = time.time()  
         self.power_ups.spawn_power_up()  
 
     def show_instructions(self):
         self.screen.fill(self.BLACK)
     
-        # Title
         title = self.big_font.render("Instructions", True, self.YELLOW)
         title_x = self.screen_width // 2 - title.get_width() // 2
         self.screen.blit(title, (title_x, 20))
@@ -1214,7 +1164,6 @@ class Game:
             ("Game Over", "Game ends when lives reach zero or if you defeat the Boss")
         ]
 
-        # Layout for instructions
         y_pos = 80
         for title, content in instructions:
             title_text = self.font.render(title + ":", True, self.RED)
@@ -1236,8 +1185,7 @@ class Game:
             ("Triple Shot", self.GREEN, "Shoot three bullets at once")
         ]
     
-        # Calculate starting position for power-ups
-        power_up_y = y_pos + 50  # Space for title
+        power_up_y = y_pos + 50  
         for name, color, effect in power_ups:
             name_text = self.font.render(f"- {name}", True, color)
             effect_text = self.font.render(effect, True, self.WHITE)
@@ -1246,7 +1194,6 @@ class Game:
             self.screen.blit(effect_text, (name_x + name_text.get_width() + 5, power_up_y))
             power_up_y += name_text.get_height() + 5
 
-        # Navigation
         back_text = self.font.render("Press any key to go back", True, self.GREEN)
         back_x = self.screen_width // 2 - back_text.get_width() // 2
         self.screen.blit(back_text, (back_x, self.screen_height - 40))
@@ -1255,7 +1202,6 @@ class Game:
         self.wait_for_keypress()
 
     def reset_game(self):
-        """Fully resets the game to avoid cross-over issues and ensure proper startup."""
         self.player.lives = 3
         self.player.x = (self.screen_width - self.player.width) // 2
         self.player.y = self.screen_height - self.player.height - 10
@@ -1268,43 +1214,42 @@ class Game:
         self.asked_questions = []
         self.enemy_manager.create_enemies()
         self.boss.health = self.boss.max_health
-        # **Reset Bullets**
+        # Reset Bullets
         self.bullet_manager.player_bullets = []
         self.bullet_manager.enemy_bullets = []
         self.bullet_manager.boss_bullets = []
-        # **Reset Power-ups**
+        # Reset Power-ups
         self.power_ups.power_up_active = False
         self.power_ups.current_power_up = None
         self.power_ups.power_ups = []
         self.power_ups.spawn_time = time.time()
-        # **Ensure game does NOT start paused**
+        # Ensure game does NOT start paused
         self.paused = False
         self.main_game_loop()
                
     def reset_game_state(self):
-        """Fully resets the game state to avoid cross-over issues when loading a save."""
-        # **Clear Bullets**
+        # Clear Bullets
         self.bullet_manager.player_bullets.clear()
         self.bullet_manager.enemy_bullets.clear()
         self.bullet_manager.boss_bullets.clear()
-        # **Clear Enemies**
+        # Clear Enemies
         self.enemy_manager.enemies.clear()
-        # **Clear Power-Ups**
+        # Clear Power-Ups
         self.power_ups.reset_power_up()
         self.power_ups.is_first_level = True
         # Reset Boss
         self.boss.reset_boss()
         self.boss_fight = False
-        # **Reset Score & Level**
+        # Reset Score & Level
         self.level = 1
         self.questions_asked = 0
         self.asked_questions.clear()
         self.score = 5000
-        # **Reset Player**
+        # Reset Player
         self.player.lives = 3
         self.player.invulnerable = False
         self.player.invulnerable_timer = 0
-        # **Ensure UI and timers are reset**
+        # Ensure UI and timers are reset
         pygame.time.set_timer(pygame.USEREVENT + 1, 0)
         if hasattr(self, 'score_adjustment'):
             del self.score_adjustment
@@ -1324,7 +1269,7 @@ class Game:
         input_box = pygame.Rect(self.screen_width // 2 + 0, self.screen_height // 2 + 30, 50, 32)
         color_inactive = self.LIGHTBLUE
         color_active = self.GREEN
-        color = color_active  # Active by default
+        color = color_active  
         text = ''
 
         while True:
@@ -1359,7 +1304,7 @@ class Game:
         self.create_loading_screen()  # Show loading screen
         try:
             payload = {'player_name': name, 'score': score}
-            # Adding Basic Authentication with the username and password
+            # Changed to HTTPS and added Basic Authentication with the username and password
             response = requests.post("https://5269989.pythonanywhere.com/submit_score", 
                                      json=payload, 
                                      timeout=5, 
