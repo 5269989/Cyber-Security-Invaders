@@ -173,6 +173,9 @@ class Game:
         self.BLUE = (0, 0, 128)
         self.LIGHTBLUE = (60, 60 , 255)
 
+        #Title
+        self.title_image = pygame.image.load("assets/fonts/Title.png")
+
         # Fonts
         self.font = pygame.font.Font("assets/fonts/TextFont.ttf", 18)
         self.big_font = pygame.font.Font("assets/fonts/TextFont.ttf", 23)
@@ -249,9 +252,9 @@ class Game:
     def load_menu_background(self):
         # Load animated menu backgrounds
         self.menu_backgrounds = [
-            pygame.image.load("assets/menu_background1.png"),
-            pygame.image.load("assets/menu_background2.png"),
-            pygame.image.load("assets/menu_background3.png")
+            pygame.image.load("assets/backgrounds/menu_background1.png"),
+            pygame.image.load("assets/backgrounds/menu_background2.png"),
+            pygame.image.load("assets/backgrounds/menu_background3.png")
         ]
         self.menu_background_index = 0  # Start with the first background
         self.last_bg_update = time.time()  # Track time for animation
@@ -354,6 +357,7 @@ class Game:
                     if hasattr(self, 'score_adjustment') and time.time() - self.score_adjustment_time >= 2:
                         del self.score_adjustment
                 if self.paused:
+                    self.power_ups.pause_powerups()
                     self.draw_pause_menu() 
                     continue
 
@@ -421,11 +425,11 @@ class Game:
             self.clock.tick(60)
 
     def check_minigame_trigger(self):
-        if self.boss.health <= (self.boss.max_health // 2):
+        if self.boss.health <= (self.boss.max_health // 2) and not self.boss.minigame_triggered:
+            self.boss.minigame_triggered = True 
             success = HackingMiniGame(self).run()
             if not success:
-                # Enter rage mode
-                self.boss.shoot_interval *= 0.8  # 20% faster
+                self.boss.shoot_interval *= 0.8
                 self.boss.rage_mode = True
                 self.display_feedback("BOSS ENRAGED!", self.RED)
             else:
@@ -433,6 +437,7 @@ class Game:
 
     def draw_pause_menu(self):
         menu_options = ["Resume", "Save Game", "Return to Menu"]
+
         selected_option = 0  # Track selected option
         while self.paused:
             # Draw game background first
@@ -443,8 +448,8 @@ class Game:
                 # Draw boss and health bar
                 self.screen.blit(self.boss.current_image, (self.boss.x, self.boss.y))
                 health_width = int(200 * (self.boss.health / self.boss.max_health))
-                pygame.draw.rect(self.screen, self.RED, (self.screen_width // 2 - 100, 10, 200, 20))
-                pygame.draw.rect(self.screen, self.GREEN, (self.screen_width // 2 - 100, 10, health_width, 20))
+                pygame.draw.rect(self.screen, self.RED, (self.screen_width // 2 - 100, 40, 200, 20))
+                pygame.draw.rect(self.screen, self.GREEN, (self.screen_width // 2 - 100, 40, health_width, 20))
             else:
                 self.enemy_manager.draw()
 
@@ -453,6 +458,7 @@ class Game:
             self.enemy_manager.draw()
             self.bullet_manager.update_player_bullets(draw_only=True)
             self.bullet_manager.update_enemy_bullets(draw_only=True)
+            self.bullet_manager.update_boss_bullets(draw_only=True)
 
              # *** Manually draw power-ups without updating them ***
             for power_up in self.power_ups.power_ups:
@@ -490,15 +496,17 @@ class Game:
                     elif event.key == pygame.K_RETURN:
                         if menu_options[selected_option] == "Resume":
                             self.paused = False
+                            self.power_ups.resume_powerups()
                             return
                         elif menu_options[selected_option] == "Save Game":
                             self.show_save_slot_menu()
                         elif menu_options[selected_option] == "Return to Menu":
+                            self.reset_game_state()
                             self.show_menu()
                     elif event.key == pygame.K_ESCAPE:
                         self.paused = False
                         return
-        
+
     def show_save_slot_menu(self):
         selected_slot = 0
         name_input = ""
@@ -543,15 +551,6 @@ class Game:
                             return
                     elif event.key == pygame.K_ESCAPE:
                         return
-                    elif event.key == pygame.K_DELETE:
-                        if self.save_slots[selected_slot]:
-                            self.save_slots[selected_slot] = None
-                            try:
-                                with open('saves.json', 'w') as f:
-                                    json.dump(self.save_slots, f)
-                                self.display_feedback("Save deleted!", self.RED)
-                            except Exception as e:
-                                print(f"Error deleting save: {e}")
 
             pygame.display.flip()
 
@@ -780,14 +779,15 @@ class Game:
                         pygame.quit()
                         quit()
 
-    def wait_for_keypress(self):
+    def wait_for_keypress(self, cooldown=1000):
+        start_time = pygame.time.get_ticks()
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
-                    return
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    quit()
+                    # Only accept the key if the cooldown period has passed.
+                    if pygame.time.get_ticks() - start_time >= cooldown:
+                        return
+            pygame.time.wait(10)  # Prevent a busy loop
 
     def show_menu(self):
         menu_options = ["New Game", "Load Game", "Leaderboard", "Instructions", "Exit"]
@@ -808,8 +808,8 @@ class Game:
             self.screen.blit(self.menu_backgrounds[self.menu_background_index], (0, 0))
 
             # Title text
-            title_text = self.title_font.render("Cyber Security Invaders", True, self.RED)  # Red color
-            self.screen.blit(title_text, (self.screen_width//2 - title_text.get_width()//2, 50))
+            self.screen.blit(self.title_image, (self.screen_width // 2 - self.title_image.get_width() // 2, 50))
+
 
             # Draw menu items
             for i, option in enumerate(menu_options):
@@ -881,7 +881,7 @@ class Game:
                     self.screen.blit(empty_text, (slot_rect.x + 20, slot_rect.y + 40))
         
             # Add return instruction
-            return_text = self.font.render("Press ESC to return to menu", True, self.GREEN)
+            return_text = self.font.render("Press ESC to return to menu | DEL to delete save", True, self.GREEN)
             self.screen.blit(return_text, (self.screen_width//2 - return_text.get_width()//2, 550))
         
             # Handle input
@@ -897,8 +897,36 @@ class Game:
                             return
                     elif event.key == pygame.K_ESCAPE:
                         return
+                    elif event.key == pygame.K_DELETE:
+                        if self.save_slots[selected_slot]:
+                            if self.confirm_delete_save():
+                                self.save_slots[selected_slot] = None
+                                try:
+                                    with open('saves.json', 'w') as f:
+                                        json.dump(self.save_slots, f)
+                                    self.display_feedback("Save deleted!", self.RED)
+                                except Exception as e:
+                                    print(f"Error deleting save: {e}")
         
             pygame.display.flip()
+            
+    def confirm_delete_save(self):
+        # Display a confirmation screen
+        self.screen.fill(self.BLACK)
+        confirm_text = self.big_font.render("Confirm delete save? (Y/N)", True, self.WHITE)
+        self.screen.blit(confirm_text, (self.screen_width//2 - confirm_text.get_width()//2,
+                                        self.screen_height//2 - confirm_text.get_height()//2))
+        pygame.display.flip()
+    
+        # Wait for user input
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_y:
+                        return True
+                    elif event.key == pygame.K_n or event.key == pygame.K_ESCAPE:
+                        return False
                             
     def save_game(self, slot, name):
         """Save all essential game states and force an update to the saves.json file."""
@@ -918,7 +946,7 @@ class Game:
         # Create the new game state
         game_state = {
             'name': name,
-            'level': self.level,
+            'level': "BOSS" if self.boss_fight else self.level,
             'boss_fight': self.boss_fight,
             'score': self.score,
             'questions_asked': self.questions_asked,
@@ -963,16 +991,37 @@ class Game:
     def get_save_name(self, slot):
         name = ""
         while True:
+            # Draw themed background
             self.screen.fill(self.BLACK)
-            prompt = self.font.render("Enter save name:", True, self.WHITE)
-            self.screen.blit(prompt, (200, 200))
         
+            # Draw decorative border
+            pygame.draw.rect(self.screen, self.GREEN, (150, 150, 900, 300), 3)
+
+            # Title text
+            prompt = self.big_font.render("NAME YOUR SAVE FILE", True, self.YELLOW)
+            self.screen.blit(prompt, (self.screen_width//2 - prompt.get_width()//2, 180))
+
+            # Input box with blinking cursor
+            input_rect = pygame.Rect(self.screen_width//2 - 200, 280, 400, 40)
+            pygame.draw.rect(self.screen, self.WHITE, input_rect, 2)
             name_text = self.font.render(name, True, self.GREEN)
-            self.screen.blit(name_text, (200, 250))
+            self.screen.blit(name_text, (input_rect.x + 10, input_rect.y + 5))
         
+            # Blinking cursor
+            if int(time.time() * 2) % 2 == 0:
+                cursor_x = input_rect.x + 10 + name_text.get_width() + 2
+                pygame.draw.line(self.screen, self.GREEN, (cursor_x, input_rect.y+5), 
+                               (cursor_x, input_rect.y+35), 3)
+
+            # Instructions
+            instr_text = self.font.render("Press ESC to cancel | ENTER to save", True, self.WHITE)
+            self.screen.blit(instr_text, (self.screen_width//2 - instr_text.get_width()//2, 350))
+
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN:
+                    if event.key == pygame.K_ESCAPE:
+                        return  # Return to save slot menu
+                    elif event.key == pygame.K_RETURN:
                         if name.strip():
                             self.save_game(slot, name.strip())
                             return
@@ -981,7 +1030,7 @@ class Game:
                     else:
                         if len(name) < 20 and event.unicode.isprintable():
                             name += event.unicode
-        
+
             pygame.display.flip()
 
     def load_game(self, slot):
@@ -1030,6 +1079,8 @@ class Game:
         # Restore boss
         if self.boss_fight:
             self.boss.health = save_data['boss_health']
+            self.enemy_manager.enemies.clear() # Fixed issue when loading from save where eneimies would spawn
+            
 
         # Restore bullets
         self.bullet_manager.player_bullets = [[b[0], b[1], b[2], b[3]] for b in save_data['player_bullets']]
@@ -1230,13 +1281,13 @@ class Game:
         # **Clear Enemies**
         self.enemy_manager.enemies.clear()
         # **Clear Power-Ups**
-        self.power_ups.power_ups.clear()
-        self.power_ups.power_up_active = False
-        self.power_ups.current_power_up = None
-        self.power_ups.spawn_time = time.time()
+        self.power_ups.reset_power_up()
+        self.power_ups.is_first_level = True
+        # Reset Boss
+        self.boss.reset_boss()
+        self.boss_fight = False
         # **Reset Score & Level**
         self.level = 1
-        self.boss_fight = False
         self.questions_asked = 0
         self.asked_questions.clear()
         self.score = 5000
@@ -1400,173 +1451,377 @@ class Player:
 
 class Boss:
     def __init__(self, game):
-        self.image1 = self.load_and_scale_image("boss1.png", (150, 150))
-        self.image2 = self.load_and_scale_image("boss2.png", (150, 150))
-        self.width, self.height = self.image1.get_size()
+        self.game = game
+
+        # Load assets
+        self.base_image = self.load_and_scale_image("boss.png", (150, 150))
+        self.rage_image = self.load_and_scale_image("boss_rage.png", (150, 150))
+        # Load the virus bullet asset
+        self.virus_bullet_image = self.load_and_scale_image("virus.png", (20, 20))
+
+        self.current_image = self.base_image
+        self.width, self.height = self.base_image.get_size()
         self.x = (game.screen_width - self.width) // 2
         self.y = 100
-        self.speed = 3
+        self.speed = 3  # used as a base speed for movement
         self.health = 100
         self.max_health = 100
-        self.shoot_interval = 0.1
         self.last_shot_time = 0
         self.animation_interval = 0.5
         self.last_animation_time = 0
-        self.current_image = self.image1
-        self.direction = 1  # 1 for right, -1 for left
-        self.game = game
-        self.phases = [
-            {"health_range": (70, 100), "move_speed": 3, "attack": "spread"},
-            {"health_range": (30, 69), "move_speed": 4, "attack": "circle"},
-            {"health_range": (0, 29), "move_speed": 5, "attack": "mixed"}
-        ]
-        self.current_phase = 0
-        self.virus_bullets = []
+        self.animation_toggle = False
+        
+        # Save initial positions/stats so you can reset if needed
+        self.initial_x = self.x
+        self.initial_y = self.y
+        self.initial_speed = self.speed
+        self.initial_shoot_interval = 0.1
+        self.initial_animation_interval = self.animation_interval
+
+        self.rage_mode = False
+        self.name = "VIRUS"
+        self.minigame_triggered = False
+
+        # For movement that needs a stored horizontal velocity
+        self.dx = self.speed
+
+        # For erratic (phase 5) movement: target position and time
+        self.target_pos = (self.x, self.y)
+        self.last_target_update = pygame.time.get_ticks()
+
+        # New attributes for the multi–phase AI:
+        self.phase = 1  # Phases 1 to 5
+        # Adjustable shooting intervals (in seconds) for each phase:
+        self.phase1_shoot_interval = 0.15  # Phase 1: Line attack (100%-81%)
+        self.phase2_shoot_interval = 0.1  # Phase 2: Spread attack (80%-61%)
+        self.phase3_shoot_interval = 0.5  # Phase 3: Aimed attack (60%-41%)
+        self.phase4_shoot_interval = 0.07  # Phase 4: Circle attack (40%-21%)
+        self.phase5_shoot_interval = 0.5  # Phase 5: Virus explosion attack (20%-0%)
 
     def load_and_scale_image(self, filename, size):
         try:
-            return pygame.transform.scale(pygame.image.load(os.path.join("assets", filename)).convert_alpha(), size)
+            return pygame.transform.scale(
+                pygame.image.load(os.path.join("assets", filename)).convert_alpha(), size
+            )
         except pygame.error as e:
             print(f"Error loading or scaling image '{filename}': {e}")
             pygame.quit()
             quit()
 
     def update(self):
-        self.x += self.speed * self.direction
-        if self.x <= 0 or self.x + self.width >= self.game.screen_width:
-            self.direction *= -1
-
-        current_time = time.time()
-        if current_time - self.last_animation_time >= self.animation_interval:
-            self.current_image = self.image2 if self.current_image == self.image1 else self.image1
-            self.last_animation_time = current_time
-
-        # Add this line to actually draw the boss
-        self.game.screen.blit(self.current_image, (self.x, self.y))
-        self.draw_health_bar()
-        self.attack_pattern()  # Keep attack pattern logic
+        # Update phase according to current health.
+        self.update_phase()
+        # Update movement based on phase.
+        self.perform_movement()
+        # Fire attacks based on phase.
+        self.attack_pattern()
+        # Update virus bullets (if any) so they can explode.
+        self.update_virus_bullets()
+        # Check for collisions with player bullets.
+        self.check_hit_by_player()
+        # Draw the boss and its health bar.
+        self.draw()
 
     def update_phase(self):
+        """Determine the current phase based on the percentage of remaining health."""
         health_percent = (self.health / self.max_health) * 100
-        for i, phase in enumerate(self.phases):
-            if phase["health_range"][0] <= health_percent <= phase["health_range"][1]:
-                self.current_phase = i
-                self.speed = phase["move_speed"]
-                break
+        if health_percent > 80:
+            self.phase = 1
+        elif health_percent > 60:
+            self.phase = 2
+        elif health_percent > 40:
+            self.phase = 3
+        elif health_percent > 20:
+            self.phase = 4
+        else:
+            self.phase = 5
 
-    def draw(self):
-        image = self.current_image.copy()
-        if self.rage_mode:
-            # Add red tint
-            color_overlay = pygame.Surface(image.get_size(), pygame.SRCALPHA)
-            color_overlay.fill((255, 0, 0, 50))  # Semi-transparent red
-            image.blit(color_overlay, (0, 0))
+    # ─── MOVEMENT PATTERNS ─────────────────────────────────────────────
+    def perform_movement(self):
+        """Call the movement routine for the current phase."""
+        if self.phase == 1:
+            self.movement_phase1()
+        elif self.phase == 2:
+            self.movement_phase2()
+        elif self.phase == 3:
+            self.movement_phase3()
+        elif self.phase == 4:
+            self.movement_phase4()
+        elif self.phase == 5:
+            self.movement_phase5()
+
+    def movement_phase1(self):
+        # Simple horizontal movement between preset boundaries.
+        x_min = 50
+        x_max = self.game.screen_width - self.width - 50
+        self.x += self.dx
+        if self.x < x_min or self.x > x_max:
+            self.dx = -self.dx
+            self.x += self.dx
+
+    def movement_phase2(self):
+        # Horizontal movement similar to phase 1 with a sine-based vertical oscillation.
+        x_min = 50
+        x_max = self.game.screen_width - self.width - 50
+        self.x += self.dx
+        if self.x < x_min or self.x > x_max:
+            self.dx = -self.dx
+            self.x += self.dx
+        base_y = 100
+        amplitude = 20
+        self.y = base_y + amplitude * math.sin(pygame.time.get_ticks() / 1000.0)
+
+    def movement_phase3(self):
+        # Boss “aims” at the player but with smoothing.
+        target_x = self.game.player.x + self.game.player.width/2 - self.width/2
+        # Calculate a fraction of the difference to move smoothly.
+        dx = (target_x - self.x) * 0.05
+        # Limit the maximum movement per update.
+        if dx > self.speed:
+            dx = self.speed
+        elif dx < -self.speed:
+            dx = -self.speed
+        self.x += dx
+        # Vertical oscillation (set movement, not pure reaction).
+        base_y = 100
+        amplitude = 20
+        self.y = base_y + amplitude * math.sin(pygame.time.get_ticks() / 1000.0)
+
+    def movement_phase4(self):
+        # Zigzag movement: use time–based sine functions for both x and y.
+        period = 3000  # period in milliseconds
+        t = pygame.time.get_ticks() % period
+        x_min = 50
+        x_max = self.game.screen_width - self.width - 50
+        sine_val = math.sin(2 * math.pi * t / period)
+        self.x = x_min + (x_max - x_min) * (sine_val + 1) / 2
+        # Vertical oscillation between 50 and 150.
+        self.y = 50 + (150 - 50) * ((math.sin(2 * math.pi * t / period + math.pi/4) + 1) / 2)
+
+    def movement_phase5(self):
+        # Erratic movement: update a target position every 2 seconds, then smoothly move toward it.
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_target_update > 2000:
+            x_min = 50
+            x_max = self.game.screen_width - self.width - 50
+            y_min = 50
+            y_max = self.game.screen_height // 3
+            self.target_pos = (random.randint(x_min, x_max), random.randint(y_min, y_max))
+            self.last_target_update = current_time
+        target_x, target_y = self.target_pos
+        dx = target_x - self.x
+        dy = target_y - self.y
+        distance = math.hypot(dx, dy)
+        if distance != 0:
+            dx = (dx / distance) * self.speed
+            dy = (dy / distance) * self.speed
+        self.x += dx
+        self.y += dy
+
+    # ─── ATTACK PATTERNS ─────────────────────────────────────────────
+    def attack_pattern(self):
+        """Select and execute an attack based on the current phase."""
+        if self.phase == 1:
+            self.phase1_attack()
+        elif self.phase == 2:
+            self.phase2_attack()
+        elif self.phase == 3:
+            self.phase3_attack()
+        elif self.phase == 4:
+            self.phase4_attack()
+        elif self.phase == 5:
+            self.phase5_attack()
+
+    def phase1_attack(self):
+        """Phase 1: Fire a bullet straight down."""
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.phase1_shoot_interval:
+            return
+        self.last_shot_time = current_time
+        self.game.bullet_manager.add_boss_bullet(
+            self.x + self.width // 2, self.y + self.height, dx=0, dy=3
+        )
+
+    def phase2_attack(self):
+        """Phase 2: Spread attack – continuously fire a single bullet with a random angle in a 45° cone (relative to straight down)."""
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.phase2_shoot_interval:
+            return
+        self.last_shot_time = current_time
+
+        # Compute the boss's firing point (center-bottom of the boss image)
+        boss_center_x = self.x + self.width / 2
+        boss_bottom_y = self.y + self.height
+
+        # Choose a random angle between -22.5° and +22.5° (relative to straight down)
+        angle = random.uniform(-90, 90)
+        rad = math.radians(angle)
     
-        self.game.screen.blit(image, (self.x, self.y))
+        # Calculate bullet velocity components; when angle=0, bullet goes straight down
+        dx = math.sin(rad) * 3  # Horizontal component
+        dy = math.cos(rad) * 3  # Vertical component
+
+        # Fire a single bullet
+        self.game.bullet_manager.add_boss_bullet(boss_center_x, boss_bottom_y, dx, dy)
+
+    def phase3_attack(self):
+        """Phase 3: Aim at the player with a little inaccuracy."""
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.phase3_shoot_interval:
+            return
+        self.last_shot_time = current_time
+        player_center_x = self.game.player.x + self.game.player.width / 2
+        player_center_y = self.game.player.y + self.game.player.height / 2
+        boss_center_x = self.x + self.width / 2
+        boss_center_y = self.y + self.height / 2
+        dx = (player_center_x - boss_center_x) / 50.0
+        dy = (player_center_y - boss_center_y) / 50.0
+        # Add slight inaccuracy
+        dx += dx * random.uniform(-0.05, 0.05)
+        dy += dy * random.uniform(-0.05, 0.05)
+        self.game.bullet_manager.add_boss_bullet(
+            self.x + self.width // 2, self.y + self.height, dx, dy
+        )
+
+    def phase4_attack(self):
+        """Phase 4: Circle attack firing a bullet in a random direction."""
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.phase4_shoot_interval:
+            return
+        self.last_shot_time = current_time
+        angle = random.randint(0, 360)
+        rad = math.radians(angle)
+        dx = math.cos(rad) * 3
+        dy = math.sin(rad) * 3
+        self.game.bullet_manager.add_boss_bullet(
+            self.x + self.width // 2, self.y + self.height, dx, dy
+        )
+
+    def phase5_attack(self):
+        """Phase 5: Virus explosion attack – fires a virus bullet that explodes halfway to the player."""
+        current_time = time.time()
+        if current_time - self.last_shot_time < self.phase5_shoot_interval:
+            return
+        self.last_shot_time = current_time
+
+        virus_bullet = {
+            "x": self.x + self.width // 2,
+            "y": self.y + self.height,
+            "dx": 0,
+            "dy": 3,
+            "type": "virus",
+            "image": self.virus_bullet_image
+        }
+        self.game.bullet_manager.boss_bullets.append(virus_bullet)
+
+    def update_virus_bullets(self):
+        """Update virus bullets and trigger their explosion when they reach the threshold."""
+
+        explosion_threshold = (5000)
+
+        for bullet in self.game.bullet_manager.boss_bullets[:]:
+            if isinstance(bullet, dict) and bullet.get("type") == "virus":
+                # Update its position
+                bullet["y"] += bullet["dy"]
+
+                if bullet["y"] >= (500):
+                    self.explode_virus(bullet)
+                    self.game.bullet_manager.boss_bullets.remove(bullet)
+
+    def explode_virus(self, bullet):
+        """Explode the virus bullet into several bullets in a circular pattern."""
+        x, y = bullet["x"], bullet["y"]
+        for angle in range(0, 360, 45):
+            rad = math.radians(angle)
+            dx = math.cos(rad) * 4
+            dy = math.sin(rad) * 4
+            self.game.bullet_manager.add_boss_bullet(x, y, dx, dy)
+
+    # ─── RAGE MODE ─────────────────────────────────────────────
+    def enable_rage_mode(self):
+        """
+        When called (for example, if the player loses the minigame),
+        the boss goes into rage mode:
+         - Movement speed increases by 15%
+         - Shooting intervals decrease by 15% (i.e. shooting faster)
+         - The health bar displays a red "(Rage Mode)" next to its name.
+        """
+        if not self.rage_mode:
+            self.rage_mode = True
+            self.speed *= 1.5  # Increase base movement speed
+            self.phase1_shoot_interval *= 0.5
+            self.phase2_shoot_interval *= 0.5
+            self.phase3_shoot_interval *= 0.5
+            self.phase4_shoot_interval *= 0.5
+            self.phase5_shoot_interval *= 0.5
+
+    # ─── DRAWING METHODS ─────────────────────────────────────────────
+    def draw(self):
+        # Handle image animation (flip periodically)
+        current_time = time.time()
+        if current_time - self.last_animation_time >= self.animation_interval:
+            self.animation_toggle = not self.animation_toggle
+            base = self.rage_image if self.rage_mode else self.base_image
+            self.current_image = (pygame.transform.flip(base, True, False)
+                                  if self.animation_toggle else base)
+            self.last_animation_time = current_time
+
+        self.game.screen.blit(self.current_image, (self.x, self.y))
         self.draw_health_bar()
 
     def draw_health_bar(self):
-        health_width = int(200 * (self.health / self.max_health))
-        pygame.draw.rect(self.game.screen, self.game.RED, (self.game.screen_width // 2 - 100, 10, 200, 20))
-        pygame.draw.rect(self.game.screen, self.game.GREEN, (self.game.screen_width // 2 - 100, 10, health_width, 20))
-
-    def attack_pattern(self):
-        phase = self.phases[self.current_phase]
-        if phase["attack"] == "spread":
-            self.spread_attack()
-        elif phase["attack"] == "circle":
-            self.circle_attack()
-        elif phase["attack"] == "mixed":
-            if random.random() < 0.3:
-                self.virus_attack()
-    
-    def spread_attack(self):
-        current_time = time.time()
-        if current_time - self.last_shot_time < self.shoot_interval:
-            return  
-
-        self.last_shot_time = current_time  # Reset cooldown timer
-
-        # Shoot a single bullet (not multiple in a line)
-        angle = random.choice([-25, -15, -5, 5, 15, 25])  # Random spread
-        rad = math.radians(angle)
-        dx = math.sin(rad) * 2.5
-        dy = math.cos(rad) * 3
-
-        self.game.bullet_manager.add_boss_bullet(self.x + self.width//2, self.y + self.height, dx, dy)
-        
-    def circle_attack(self):
-        current_time = time.time()
-        if current_time - self.last_shot_time < self.shoot_interval:
-            return  
-
-        self.last_shot_time = current_time  # Reset cooldown
-
-        angle = random.randint(0, 360)  
-        rad = math.radians(angle)
-
-        self.game.bullet_manager.add_boss_bullet(
-            self.x + self.width//2,
-            self.y + self.height,
-            dx=math.cos(rad)*3,
-            dy=math.sin(rad)*3
-        )
-
-    def line_attack(self):
-        current_time = time.time()
-        if current_time - self.last_shot_time < self.shoot_interval:
-            return
-
-        self.last_shot_time = current_time
-        # Add dx=0, dy=3 parameters
-        self.game.bullet_manager.add_boss_bullet(
-            self.x + self.width//2,
-            self.y + self.height,
-            dx=0,
-            dy=3
-        )
-
-    def virus_attack(self):
-        # Create exploding virus bullet
-        virus = [
-            self.x + self.width//2,
-            self.y + self.height,
-            0,  # dx
-            3,  # dy
-            True  # active
-        ]
-        self.virus_bullets.append(virus)
-        
-    def update_virus_bullets(self):
-        for bullet in self.virus_bullets[:]:
-            if bullet[4]:  # Active
-                bullet[0] += bullet[2]
-                bullet[1] += bullet[3]
-                if bullet[1] > self.game.screen_height:
-                    self.virus_bullets.remove(bullet)
-                elif random.random() < 0.02:  # Explode
-                    self.explode_virus(bullet)
-                    bullet[4] = False
-                    
-    def explode_virus(self, bullet):
-        for _ in range(8):
-            angle = random.uniform(0, 2*math.pi)
-            self.game.bullet_manager.add_boss_bullet(
-                bullet[0], bullet[1],
-                dx=math.cos(angle)*4,
-                dy=math.sin(angle)*4
-            )
+        bar_width = 200
+        health_width = int(bar_width * (self.health / self.max_health))
+        bar_x = self.game.screen_width // 2 - bar_width // 2
+        pygame.draw.rect(self.game.screen, self.game.RED, (bar_x, 40, bar_width, 20))
+        pygame.draw.rect(self.game.screen, self.game.GREEN, (bar_x, 40, health_width, 20))
+        name_text = self.game.font.render(self.name, True, self.game.YELLOW)
+        name_x = self.game.screen_width // 2 - name_text.get_width() // 2
+        self.game.screen.blit(name_text, (name_x, 10))
+        if self.rage_mode:
+            rage_text = self.game.font.render("(Rage Mode)", True, self.game.RED)
+            self.game.screen.blit(rage_text, (name_x + name_text.get_width() + 10, 10))
 
     def check_hit_by_player(self):
-        for bullet in self.game.bullet_manager.player_bullets:
-            if self.x < bullet[0] < self.x + self.width and self.y < bullet[1] < self.y + self.height:
+        """Check for collision with player bullets and update health."""
+        for bullet in self.game.bullet_manager.player_bullets[:]:
+            if (self.x < bullet[0] < self.x + self.width and 
+                self.y < bullet[1] < self.y + self.height):
                 self.game.bullet_manager.player_bullets.remove(bullet)
                 self.health -= 1
                 if self.health <= 0:
-                    self.game.change_music(self.game.boss_defeated_music)  # Correct music reference
+                    self.game.change_music(self.game.boss_defeated_music)
                     self.game.display_feedback("Boss Defeated!", self.game.GREEN)
-                    self.game.power_ups.reset_power_up()  
                     self.game.end_game_screen()
+                # Trigger the minigame (or rage mode) once when health is low.
+                elif self.health <= 50 and not self.rage_mode and not self.minigame_triggered:
+                    success = HackingMiniGame(self.game).run()
+                    if not success:
+                        self.enable_rage_mode()
+                    self.minigame_triggered = True
+                    
+    def trigger_minigame(self):
+        success = HackingMiniGame(self.game).run()
+        if not success:
+            self.shoot_interval *= 0.8
+            self.rage_mode = True
+        self.minigame_triggered = True
+        
+    def reset_boss(self):
+        """Reset the boss to its initial state."""
+        self.x = self.initial_x
+        self.y = self.initial_y
+        self.health = 100
+        self.max_health = 100
+        self.speed = self.initial_speed
+        self.shoot_interval = self.initial_shoot_interval
+        self.animation_interval = self.initial_animation_interval
+        self.last_shot_time = 0
+        self.last_animation_time = 0
+        self.current_image = self.base_image
+        self.direction = 1
+        self.rage_mode = False
+        self.minigame_triggered = False
 
 class EnemyManager:
     def __init__(self, game):
@@ -1726,20 +1981,36 @@ class BulletManager:
                 self.enemy_bullets.remove(bullet)
                 
     def update_boss_bullets(self, draw_only=False):
+        """Updates or draws boss bullets, depending on the draw_only flag."""
         for bullet in self.boss_bullets[:]:
-            if not draw_only:
-                # Move bullet using dx/dy values
-                bullet[0] += bullet[2]  # Update X with dx
-                bullet[1] += bullet[3]  # Update Y with dy
+            if isinstance(bullet, dict) and bullet.get("type") == "virus":
+                if not draw_only:
+                    # Update virus bullet position
+                    bullet["x"] += bullet["dx"]
+                    bullet["y"] += bullet["dy"]
 
-            # Draw boss bullet
-            pygame.draw.rect(self.game.screen, self.game.YELLOW, 
-                            (bullet[0], bullet[1], self.bullet_width, 10))
-        
-            # Remove off-screen bullets
-            if not draw_only and (bullet[1] > self.game.screen_height or 
-                                bullet[0] < 0 or 
-                                bullet[0] > self.game.screen_width):
+                    # Check if virus bullet should explode
+                    explosion_threshold = self.game.screen_height / 2
+                    if bullet["y"] >= explosion_threshold:
+                        self.game.boss.explode_virus(bullet)
+                        self.boss_bullets.remove(bullet)
+                        continue  # Skip drawing if removed
+
+                # Draw virus bullet
+                self.game.screen.blit(bullet["image"], (bullet["x"], bullet["y"]))
+
+            elif isinstance(bullet, list) and len(bullet) == 4:
+                if not draw_only:
+                    # Update normal boss bullet (stored as a list)
+                    bullet[0] += bullet[2]  # x += dx
+                    bullet[1] += bullet[3]  # y += dy
+
+                # Draw normal boss bullet (yellow, same shape as player bullets)
+                pygame.draw.rect(self.game.screen, self.game.YELLOW, 
+                                 (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
+
+            else:
+                print("WARNING: Skipping invalid bullet:", bullet)
                 self.boss_bullets.remove(bullet)
 
     def check_player_hit(self):
@@ -1750,6 +2021,7 @@ class BulletManager:
                     self.enemy_bullets.remove(bullet)
                     self.game.last_hit_time = time.time()
                     return True
+                self.enemy_bullets.remove(bullet)
         return False
 
     def reset_triple_shot(self):
@@ -1779,10 +2051,12 @@ class PowerUpManager:
         self.power_up_timer = 0
         self.current_power_up = None
         self.last_level_check = 1
-        self.is_first_level = True  
+        self.is_first_level = True 
+        self.paused_time = None 
         
     def update(self):
-        if self.game.paused:  # Don't update timers while paused
+        if self.game.paused:
+            self.paused_time = time.time()
             return
         current_time = time.time()
         # Only update spawn time if not paused
@@ -1848,12 +2122,26 @@ class PowerUpManager:
         self.game.adjust_score(250)  
         self.game.power_up_sound.play()
 
+    def pause_powerups(self):
+        """Freeze the powerup timer when the game is paused."""
+        if self.power_up_active and self.paused_time is None:
+            # Record the time at which the game was paused.
+            self.paused_time = time.time()
+
+    def resume_powerups(self):
+        """Adjust the powerup timer to resume as if paused time never passed."""
+        if self.power_up_active and self.paused_time is not None:
+            # Calculate how long the game was paused.
+            paused_duration = time.time() - self.paused_time
+            # Push the expiration time further by the paused duration.
+            self.power_up_timer += paused_duration
+            # Clear the paused time flag.
+            self.paused_time = None
+
     def reset_power_up(self):
-        """
-        Resets all active power-up effects and prepares for the next spawn.
-        """
         self.power_up_active = False
         self.current_power_up = None
+        self.power_ups = []
         self.power_ups.clear()
         self.spawn_time = time.time()  # Reset the spawn timer
         # Reset specific power-up effects
