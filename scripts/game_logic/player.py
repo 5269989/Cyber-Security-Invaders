@@ -11,7 +11,7 @@ class Player:
         self.speed = 5
         self.lives = 3
         self.game = game
-        self.invulnerable = False  # Initialize invulnerability state
+        self.invulnerable = False  
         self.invulnerable_timer = 0
         self.invulnerable_duration = 5  # Duration in seconds for invulnerability
         self.shield_outline = self.create_shield_outline()
@@ -39,7 +39,6 @@ class Player:
                             if 0 <= nx < self.width and 0 <= ny < self.height and not player_mask.get_at((nx, ny)):
                                 # Set color for a thicker outline
                                 outline_surface.set_at((x, y), dark_blue)
-                                # Optionally, set color for adjacent pixels to make it even thicker
                                 for i in range(-1, 2):
                                     for j in range(-1, 2):
                                         nx2, ny2 = x + i, y + j
