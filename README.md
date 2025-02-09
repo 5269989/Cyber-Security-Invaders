@@ -1,82 +1,118 @@
-# Cyber Security Invaders
+# 🛡️ Cyber Security Invaders  
 
-**Cyber Security Invaders** is an educational arcade-style game built with Python and Pygame, designed to teach players about cybersecurity concepts while providing a fun gaming experience. Players control a spacecraft at the bottom of the screen, aiming to shoot down enemy invaders while answering cybersecurity questions to earn extra lives.
+**Cyber Security Invaders** is an educational arcade game that combines cybersecurity learning with fast-paced action. Battle through hacker waves, defeat the final boss, and climb the leaderboard while learning vital security concepts!
 
-## Features
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)](https://python.org)  
+[![Pygame](https://img.shields.io/badge/Pygame-2.1.3-green?logo=pygame)](https://pygame.org)  
+[![Raspberry Pi](https://img.shields.io/badge/Raspberry_Pi-Compatible-red?logo=raspberrypi)](https://raspberrypi.org)
 
-- **Engaging Gameplay:** Navigate your player left and right to avoid enemy attacks while shooting down invaders.
-- **Educational Questions:** Answer multiple-choice cybersecurity questions to increase your lives and enhance your knowledge.
-- **Levels and Difficulty:** Progress through multiple levels, each with increasing difficulty and faster enemies.
-- **Game Over Mechanics:** The game ends if any enemy reaches the bottom of the screen or if the player loses all lives.
-- **Visuals:** Utilize PNG images for player and enemy sprites, enhancing the game's visual appeal.
-- **Leaderboard System:** Cloud flask server for score tracking and display.
+![Gameplay Demo](assets/gameplay.gif) 
 
-## Getting Started
+## 🚀 New Features & Enhancements
 
-### Prerequisites
+### 🕹️ Gameplay Additions
+- **Boss Battles** 👾 - Face off against massive final bosse at the end of the base levels
+- **Power-Up System** ⚡  
+  - *Laser Beams*: Super-charged attack  
+  - *Energy Shields*: Temporary invulnerability  
+  - *Triple Shot*: Triple your firepower  
+- **7-Segment Display Integration** 🔢 (Raspberry Pi) - Real-time score tracking  
+- **Dual LED Feedback** 💡 (RPi) - Green/red LEDs for correct/incorrect answers
 
-- **Python:** Version 3.x
-- **Pygame:** For game graphics and sound
-- **RPi.GPIO (optional):** If running on Raspberry Pi for LED feedback
+### 🛠️ System Features
+- **Save/Load System** 💾 - 3 save slots with timestamped backups  
+- **Networked Leaderboard** 🌐 - Global score tracking via Flask server  
+- **Animated Menus** 🎭 - Dynamic background animations  
+- **Enhanced Soundtrack** 🎵 - Level-specific music and SFX  
+- **Gameplay Instructions** 📖 - Built-in gameplay instructions  
 
-### Installation
+## 📦 Installation
 
-1. **Clone the repository:**
-    ```
-   . git clone https://github.com/yourusername/cyber-security-invaders.git
-   ```
-3. **Navigate to the project directory:**
-   ```
-   . cd cyber-security-invaders
-   ```
-4. **Install dependencies:**
-- Ensure Pygame is installed. If not, install it using:
-  ```
-  pip install pygame
-  ```
-- If you're using a Raspberry Pi and want GPIO integration:
-  ```
-  pip install RPi.GPIO
-  ```
+### Requirements
+- Python 3.8+  
+- Pygame 2.1.3  
+- Raspberry Pi (optional for hardware features)
 
-### Running the Game
+```bash
+# Clone repository
+```bash
+git clone https://github.com/yourusername/cyber-security-invaders.git
+cd cyber-security-invaders
+```
 
-**Run the Game:**
-- Open a new terminal or command prompt.
-- Navigate back to the game directory if necessary:
-  ```
-  cd ..
-  cd game
-  ```
-- Start the game:
-  ```
-  Cyber_Security_Invaders_V2.py
-  ```
+# Install dependencies
+```bash
+pip install -r requirements.txt
+```
 
-### Running on Raspberry Pi
+# Raspberry Pi extras
+```bash
+pip install RPi.GPIO
+```
 
-- Connect LEDs to GPIO pins as described in the code (pins 4 and 17 for this setup).
-- Ensure RPi.GPIO is installed as mentioned in the prerequisites.
+## 🎮 Controls
 
-### Game Controls
+| Action              | Keyboard       |
+|---------------------|----------------|
+| Move Left           | ← Arrow        | 
+| Move Right          | → Arrow        | 
+| Shoot               | Spacebar       | 
+| Pause/Menu          | ESC            |  
+| Menu Navigation     | ↑/↓ Arrows     |  
+| Confirm Selection   | Enter          | 
 
-- **Move Left:** Left Arrow Key
-- **Move Right:** Right Arrow Key
-- **Shoot:** Spacebar
-- **Select Menu Options:** Up/Down Arrow Keys, Enter to confirm
-- **Game Over Interaction:** 'R' to restart, 'Q' to quit
+## 🧠 Cybersecurity Features
 
-### Troubleshooting
+### Educational Q&A System ❓
+- Randomly generated security questions
+- Multiple-choice format
+- Progressive difficulty
 
-- **Server Not Responding:** The leaderboard server may be down
-- **Game Freezes:** Verify Python, Pygame, and all dependencies are correctly installed. Also, check server IP in the game code.
-- **GPIO Issues on Raspberry Pi:** Ensure you have the necessary permissions and that GPIO pins are correctly configured.
+### Security Concepts Covered 🔐
+- Phishing attacks
+- Password security
+- Network protocols
+- Malware types
+- 2FA fundamentals
 
-## License
+## 🌟 Special Features
 
-This project is licensed under the [MIT License](LICENSE).
+## # Raspberry Pi Hardware Integration
+```python
+if is_raspberry_pi:
+    GPIO.setup([SEGMENT_PINS, LED_PINS], GPIO.OUT)
+    threading.Thread(target=update_7seg_display).start()
+```
 
-## Acknowledgments
+### Real Hardware Feedback 🖥️
+- 4-digit 7-segment score display
+- Dual-color LED answer feedback
+- GPIO-based controls
 
-- Inspiration from classic arcade games.
-- Thanks to the open-source community for Pygame and Flask.
+## 📊 Leaderboard System
+
+# # Cloud-based score tracking
+```python
+response = requests.post("https://5269989.pythonanywhere.com/submit_score")
+```
+- Global high score tracking
+- Secure authentication
+- Automatic score validation
+- Mobile-friendly display
+
+## 🛠️ Troubleshooting
+
+| Issue               | Solution                                   |
+|---------------------|--------------------------------------------|
+| Missing dependencies| `pip install -r requirements.txt`         |
+| GPIO permissions    | Run with `sudo`                            |
+| Display not working | Check wiring & pin assignments            |
+| Leaderboard unavailable  | Server Down                     |
+
+## 📜 License
+MIT License - See LICENSE for details
+
+## 🙌 Acknowledgements
+- Pygame community for graphics framework
+- Raspberry Pi Foundation for hardware support
+- Open-source cybersecurity resources
