@@ -1,20 +1,16 @@
 import pygame
+import random
 import os
-import time
 
-class Player:
+class EnemyManager:
     def __init__(self, game):
-        self.image = self.load_and_scale_image("player.png", (50, 50))
-        self.width, self.height = self.image.get_size()
-        self.x = (game.screen_width - self.width) // 2
-        self.y = game.screen_height - self.height - 10
-        self.speed = 5
-        self.lives = 3
+        self.enemies = []
+        self.enemy_image = self.load_and_scale_image("enemy.png", (40, 40))
+        self.enemy_speed = 2
+        self.shoot_prob = 0.003
+        self.direction = 1
         self.game = game
-        self.invulnerable = False  
-        self.invulnerable_timer = 0
-        self.invulnerable_duration = 5  # Duration in seconds for invulnerability
-        self.shield_outline = self.create_shield_outline()
+        self.create_enemies()
 
     def load_and_scale_image(self, filename, size):
         try:
@@ -24,62 +20,51 @@ class Player:
             pygame.quit()
             quit()
 
-    def create_shield_outline(self):
-        outline_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        player_mask = pygame.mask.from_surface(self.image)
-        dark_blue = (60, 60 , 180, 255)  # Darker blue for the outline
+    def create_enemies(self):
+        self.enemies = []
+        for row in range(5):
+            for col in range(10):
+                enemy_x = col * (self.enemy_image.get_width() + 10) + 50
+                enemy_y = row * (self.enemy_image.get_height() + 10) + 50
+                self.enemies.append([enemy_x, enemy_y])
 
-        for x in range(self.width):
-            for y in range(self.height):
-                if player_mask.get_at((x, y)):
-                    # Check if this pixel is on or near the edge of the shape
-                    for dx in range(-2, 3):  # Check 2 pixels in each direction
-                        for dy in range(-2, 3):
-                            nx, ny = x + dx, y + dy
-                            if 0 <= nx < self.width and 0 <= ny < self.height and not player_mask.get_at((nx, ny)):
-                                # Set color for a thicker outline
-                                outline_surface.set_at((x, y), dark_blue)
-                                for i in range(-1, 2):
-                                    for j in range(-1, 2):
-                                        nx2, ny2 = x + i, y + j
-                                        if 0 <= nx2 < self.width and 0 <= ny2 < self.height:
-                                            outline_surface.set_at((nx2, ny2), dark_blue)
-                                break  # Break after setting one outline pixel to prevent overwriting
-                        else:
-                            continue
-                        break
+    def update(self):
+        if not self.enemies:
+            if self.game.paused:  
+                return  
 
-        return outline_surface    
+            if self.game.level < self.game.total_levels:
+                self.game.level += 1
+                self.game.level_up_sound.play()
+                self.game.display_feedback(f"Level {self.game.level - 1} Complete!", self.game.GREEN)
+                self.game.clear_level()
+                self.create_enemies()
+            else:
+                self.game.boss_fight_splash_screen()
+                self.game.boss_fight = True
 
-    def move(self, keys):
-        if keys[pygame.K_LEFT]:
-            self.x -= self.speed
-        if keys[pygame.K_RIGHT]:
-            self.x += self.speed
-        self.x = max(0, min(self.x, self.game.screen_width - self.width))
+        edge_reached = False
+        for enemy in self.enemies:
+            enemy[0] += self.enemy_speed * self.direction
+            if enemy[0] <= 0 or enemy[0] + 40 >= self.game.screen_width:
+                edge_reached = True
 
-    def shoot(self, keys):
-        current_time = time.time()
-        if keys[pygame.K_SPACE] and current_time - self.game.bullet_manager.last_shot_time >= self.game.bullet_manager.player_shoot_interval:
-            self.game.bullet_manager.add_player_bullet(self.x + self.width // 2, self.y)
-            self.game.bullet_manager.last_shot_time = current_time
-            self.game.shoot_sound.play()
+            if random.random() < self.shoot_prob:
+                self.game.bullet_manager.add_enemy_bullet(enemy[0] + 20, enemy[1] + 40)
+
+            if enemy[1] + 40 >= self.game.screen_height:
+                self.game.game_over = True
+                self.game.game_over_screen()
+
+        if edge_reached:
+            for enemy in self.enemies:
+                enemy[1] += 20
+            self.direction *= -1
 
     def draw(self):
-        self.game.screen.blit(self.image, (self.x, self.y))
-        
-        if self.invulnerable:
-            if int(time.time() * 5) % 2 == 0:  # Flash every 0.2 seconds
-                self.game.screen.blit(self.shield_outline, (self.x, self.y))
-                
-    def set_invulnerable(self, duration=None):
-        self.invulnerable = True
-        self.invulnerable_timer = time.time()
-        if duration:
-            self.invulnerable_duration = duration
-            
-    def check_invulnerability(self):
-        if self.invulnerable:
-            current_time = time.time()
-            if current_time - self.invulnerable_timer >= self.invulnerable_duration:
-                self.invulnerable = False
+        for enemy in self.enemies:
+            self.game.screen.blit(self.enemy_image, (enemy[0], enemy[1]))
+
+    def increase_difficulty(self):
+        self.enemy_speed += 0.5
+        self.shoot_prob += 0.001
