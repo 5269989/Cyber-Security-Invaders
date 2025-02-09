@@ -1,4 +1,4 @@
-﻿import pygame
+import pygame
 import platform
 import random
 import time
@@ -9,12 +9,16 @@ import requests
 import datetime
 from threading import Thread
 from requests.auth import HTTPBasicAuth
-from player import Player
-from boss import Boss
-from enemy_manager import EnemyManager
-from bullet_manager import BulletManager
-from powerup_manager import PowerUpManager
-from minigame import HackingMiniGame
+from scripts.game_logic.player import Player
+from scripts.game_logic.boss import Boss
+from scripts.game_logic.enemy_manager import EnemyManager
+from scripts.game_logic.bullet_manager import BulletManager
+from scripts.game_logic.powerup_manager import PowerUpManager
+from scripts.game_logic.minigame import HackingMiniGame
+
+def get_asset_path(*path_parts):
+    """Returns the absolute path for an asset based on the project root."""
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", *path_parts))
 
 class Game:
     def __init__(self):
@@ -224,29 +228,31 @@ class Game:
         else:
             print("Not running on RPi, GPIO functionality disabled.")
             
+
+
+  
     def load_sounds(self):
         """Loads game sound effects and background music safely."""
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get script directory
-    
-        #Music Paths (Using os.path.join for cross-platform compatibility)
-        self.menu_music = os.path.join(BASE_DIR, "assets", "sounds", "background_music", "menu_music.wav")
-        self.level_music = os.path.join(BASE_DIR, "assets", "sounds", "background_music", "level_music.wav")
-        self.boss_music = os.path.join(BASE_DIR, "assets", "sounds", "background_music", "boss_music.wav")
-        self.game_over_music = os.path.join(BASE_DIR, "assets", "sounds", "background_music", "game_over.wav")
-        self.boss_defeated_music = os.path.join(BASE_DIR, "assets", "sounds", "background_music", "boss_defeated.wav")
+        # Background Music Paths
+        self.menu_music = get_asset_path("assets", "sounds", "background_music", "menu_music.wav")
+        self.level_music = get_asset_path("assets", "sounds", "background_music", "level_music.wav")
+        self.boss_music = get_asset_path("assets", "sounds", "background_music", "boss_music.wav")
+        self.game_over_music = get_asset_path("assets", "sounds", "background_music", "game_over.wav")
+        self.boss_defeated_music = get_asset_path("assets", "sounds", "background_music", "boss_defeated.wav")
 
-        #Check if music files exist before loading them
-        for music_file in [self.menu_music, self.level_music, self.boss_music, self.game_over_music]:
+        # Check if music files exist before loading them
+        for music_file in [self.menu_music, self.level_music, self.boss_music, self.game_over_music, self.boss_defeated_music]:
             if not os.path.exists(music_file):
-                print(f"🚨 Warning: Music file missing -> {music_file}")  # Debugging info
+                print(f"🚨 Warning: Music file missing -> {music_file}")
 
-        #Sound Effect Paths
-        self.shoot_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "assets", "sounds", "shoot.wav"))
-        self.hit_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "assets", "sounds", "hit.wav"))
-        self.correct_answer_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "assets", "sounds", "correct.wav"))
-        self.wrong_answer_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "assets", "sounds", "wrong.wav"))
-        self.level_up_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "assets", "sounds", "level_up.wav"))
-        self.power_up_sound = pygame.mixer.Sound(os.path.join(BASE_DIR, "assets", "sounds", "power_up.wav"))
+        # Sound Effect Paths
+        self.shoot_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "shoot.wav"))
+        self.hit_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "hit.wav"))
+        self.correct_answer_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "correct.wav"))
+        self.wrong_answer_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "wrong.wav"))
+        self.level_up_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "level_up.wav"))
+        self.power_up_sound = pygame.mixer.Sound(get_asset_path("assets", "sounds", "power_up.wav"))
+
 
         #Set volume (adjust as needed)
         pygame.mixer.music.set_volume(0.8)
