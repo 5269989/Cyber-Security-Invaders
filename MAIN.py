@@ -1,5 +1,6 @@
 import pygame
-from game import Game
+from scripts.game_logic.game import Game
+
 
 def main():
     pygame.init()
