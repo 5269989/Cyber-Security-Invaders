@@ -84,7 +84,7 @@ if is_raspberry_pi:
     threading.Thread(target=update_7seg_display).start()
 ```
 
-### Real Hardware Feedback 🖥
+### Real Hardware Feedback 
 - 4-digit 7-segment score display
 - Dual-color LED answer feedback
 - GPIO-based controls
