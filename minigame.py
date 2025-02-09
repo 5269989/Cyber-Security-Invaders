@@ -20,16 +20,27 @@ class HackingMiniGame:
         self.generate_grid()
 
     def generate_grid(self):
-        # Ensure the word fits in the grid
-        word_length = len(self.correct_word)
-        max_start = self.grid_size - word_length
-        if max_start < 0:
-            raise ValueError("Word too long for grid size")
-        start_col = random.randint(0, max_start)
-        row = random.randint(0, self.grid_size - 1)
-        # Replace the grid positions with the word
-        for i in range(word_length):
-            self.grid[row][start_col + i] = self.correct_word[i]
+        """Generate the grid with the correct word hidden in a random orientation."""
+        self.grid = [[random.choice(self.chars) for _ in range(self.grid_size)] 
+                     for _ in range(self.grid_size)]
+        
+        # Randomly choose orientation: 0 = horizontal, 1 = vertical, 2 = diagonal (top-left to bottom-right)
+        orientation = random.choice([0, 1, 2])
+        if orientation == 0:  # Horizontal
+            row = random.randint(0, self.grid_size - 1)
+            start_col = random.randint(0, self.grid_size - len(self.correct_word))
+            for i, c in enumerate(self.correct_word):
+                self.grid[row][start_col + i] = c
+        elif orientation == 1:  # Vertical
+            col = random.randint(0, self.grid_size - 1)
+            start_row = random.randint(0, self.grid_size - len(self.correct_word))
+            for i, c in enumerate(self.correct_word):
+                self.grid[start_row + i][col] = c
+        elif orientation == 2:  # Diagonal
+            start_row = random.randint(0, self.grid_size - len(self.correct_word))
+            start_col = random.randint(0, self.grid_size - len(self.correct_word))
+            for i, c in enumerate(self.correct_word):
+                self.grid[start_row + i][start_col + i] = c
 
     def show_instructions(self):
         """Display minigame instructions splash screen"""
@@ -37,10 +48,10 @@ class HackingMiniGame:
         
         # Title
         title = self.game.bold_font.render("HACKING MINIGAME", True, self.game.GREEN)
-        title_rect = title.get_rect(center=(self.screen_width//2, 100))
+        title_rect = title.get_rect(center=(self.screen_width // 2, 100))
         self.screen.blit(title, title_rect)
         
-        # Instructions
+        # Instructions (with dynamic max letters)
         instructions = [
             "Find the hidden security word in the grid!",
             "Use arrow keys to navigate",
@@ -55,7 +66,7 @@ class HackingMiniGame:
         y = 200
         for line in instructions:
             text = self.game.font.render(line, True, self.game.WHITE)
-            text_rect = text.get_rect(center=(self.screen_width//2, y))
+            text_rect = text.get_rect(center=(self.screen_width // 2, y))
             self.screen.blit(text, text_rect)
             y += 40
             
@@ -66,10 +77,10 @@ class HackingMiniGame:
         """Draw all game elements"""
         self.screen.fill(self.game.BLACK)
         
-        # Timer
+        # Timer: Draw centered at the top of the screen.
         timer_text = self.game.font.render(f"TIME: {int(remaining_time)}", True, 
-                                         self.game.RED if remaining_time < 5 else self.game.WHITE)
-        self.screen.blit(timer_text, (self.screen_width - 150, 10))
+                                             self.game.RED if remaining_time < 5 else self.game.WHITE)
+        self.screen.blit(timer_text, (self.screen_width // 2 - timer_text.get_width() // 2, 10))
         
         # Grid
         cell_size = 40
@@ -84,7 +95,7 @@ class HackingMiniGame:
                 
                 # Draw selection box
                 if row == self.selected_row and col == self.selected_col:
-                    pygame.draw.rect(self.screen, self.game.GREEN, (x-2, y-2, cell_size+4, cell_size+4), 3)
+                    pygame.draw.rect(self.screen, self.game.GREEN, (x - 2, y - 2, cell_size + 4, cell_size + 4), 3)
                 
                 # Draw character
                 text = self.game.font.render(char, True, self.game.WHITE)
@@ -92,13 +103,13 @@ class HackingMiniGame:
         
         # Input buffer
         input_text = self.game.font.render("".join(self.input_buffer), True, self.game.WHITE)
-        input_rect = input_text.get_rect(center=(self.screen_width//2, start_y + (self.grid_size * cell_size) + 50))
+        input_rect = input_text.get_rect(center=(self.screen_width // 2, start_y + (self.grid_size * cell_size) + 50))
         self.screen.blit(input_text, input_rect)
         
-        # Input status
-        status_color = self.game.RED if len(self.input_buffer) >= 6 else self.game.WHITE
-        status_text = self.game.font.render(f"Letters: {len(self.input_buffer)}/6", True, status_color)
-        self.screen.blit(status_text, (self.screen_width//2 - 50, input_rect.bottom + 10))
+        # Input status – using dynamic max letters
+        status_color = self.game.RED if len(self.input_buffer) >= len(self.correct_word) else self.game.WHITE
+        status_text = self.game.font.render(f"Letters: {len(self.input_buffer)}/{len(self.correct_word)}", True, status_color)
+        self.screen.blit(status_text, (self.screen_width // 2 - 100, input_rect.bottom + 10))
 
     def show_result(self, success):
         """Show win/lose result screen"""
@@ -107,16 +118,17 @@ class HackingMiniGame:
         result_text = "ACCESS GRANTED!" if success else "ACCESS DENIED!"
         color = self.game.GREEN if success else self.game.RED
         text = self.game.bold_font.render(result_text, True, color)
-        text_rect = text.get_rect(center=(self.screen_width//2, self.screen_height//2))
+        text_rect = text.get_rect(center=(self.screen_width // 2, self.screen_height // 2))
         self.screen.blit(text, text_rect)
         
         if not success:
             effect_text = self.game.font.render("The boss is entering rage mode!", True, self.game.RED)
-            effect_rect = effect_text.get_rect(center=(self.screen_width//2, self.screen_height//2 + 50))
+            effect_rect = effect_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2 + 50))
             self.screen.blit(effect_text, effect_rect)
+            self.game.boss.enable_rage_mode()
         
         prompt = self.game.font.render("Press any key to continue...", True, self.game.WHITE)
-        prompt_rect = prompt.get_rect(center=(self.screen_width//2, self.screen_height//2 + 100))
+        prompt_rect = prompt.get_rect(center=(self.screen_width // 2, self.screen_height // 2 + 100))
         self.screen.blit(prompt, prompt_rect)
         
         pygame.display.flip()
@@ -125,7 +137,8 @@ class HackingMiniGame:
     def run(self):
         """Main minigame loop"""
         self.show_instructions()
-        self.start_time = pygame.time.get_ticks() / 1000  # Reset timer after instructions
+        # Reset timer so that it starts after the instructions are dismissed.
+        self.start_time = pygame.time.get_ticks() / 1000
         success = False
         running = True
         
@@ -134,7 +147,7 @@ class HackingMiniGame:
             current_time = pygame.time.get_ticks() / 1000
             elapsed = current_time - self.start_time
             remaining = self.time_limit - elapsed
-            
+
             # Handle timeout
             if remaining <= 0:
                 running = False
@@ -147,22 +160,19 @@ class HackingMiniGame:
                     quit()
                 
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        return False
-                    
                     # Navigation
                     if event.key == pygame.K_UP:
                         self.selected_row = max(0, self.selected_row - 1)
                     elif event.key == pygame.K_DOWN:
-                        self.selected_row = min(self.grid_size-1, self.selected_row + 1)
+                        self.selected_row = min(self.grid_size - 1, self.selected_row + 1)
                     elif event.key == pygame.K_LEFT:
                         self.selected_col = max(0, self.selected_col - 1)
                     elif event.key == pygame.K_RIGHT:
-                        self.selected_col = min(self.grid_size-1, self.selected_col + 1)
+                        self.selected_col = min(self.grid_size - 1, self.selected_col + 1)
                     
                     # Selection
                     elif event.key == pygame.K_RETURN:
-                        if len(self.input_buffer) < 6:
+                        if len(self.input_buffer) < len(self.correct_word):
                             char = self.grid[self.selected_row][self.selected_col]
                             self.input_buffer.append(char)
                     
@@ -176,8 +186,8 @@ class HackingMiniGame:
                 running = False
                 success = True
             
-            # Check max letters exceeded
-            if len(self.input_buffer) > 6:
+            # Check if input exceeds allowed length (dynamic check)
+            if len(self.input_buffer) > len(self.correct_word):
                 running = False
                 success = False
             
