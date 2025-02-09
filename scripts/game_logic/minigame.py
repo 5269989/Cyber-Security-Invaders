@@ -14,7 +14,7 @@ class HackingMiniGame:
         self.selected_row = 0
         self.selected_col = 0
         self.input_buffer = []
-        self.time_limit = 15  # Editable timer variable
+        self.time_limit = 15  # Timer for game 
         self.start_time = pygame.time.get_ticks() / 1000
         self.grid = []
         self.generate_grid()
@@ -24,7 +24,7 @@ class HackingMiniGame:
         self.grid = [[random.choice(self.chars) for _ in range(self.grid_size)] 
                      for _ in range(self.grid_size)]
         
-        # Randomly choose orientation: 0 = horizontal, 1 = vertical, 2 = diagonal (top-left to bottom-right)
+        # Randomly choose orientation: 0 = horizontal, 1 = vertical, 2 = diagonal 
         orientation = random.choice([0, 1, 2])
         if orientation == 0:  # Horizontal
             row = random.randint(0, self.grid_size - 1)
@@ -43,10 +43,8 @@ class HackingMiniGame:
                 self.grid[start_row + i][start_col + i] = c
 
     def show_instructions(self):
-        """Display minigame instructions splash screen"""
         self.screen.fill(self.game.BLACK)
         
-        # Title
         title = self.game.bold_font.render("HACKING MINIGAME", True, self.game.GREEN)
         title_rect = title.get_rect(center=(self.screen_width // 2, 100))
         self.screen.blit(title, title_rect)
@@ -77,7 +75,7 @@ class HackingMiniGame:
         """Draw all game elements"""
         self.screen.fill(self.game.BLACK)
         
-        # Timer: Draw centered at the top of the screen.
+        # Timer
         timer_text = self.game.font.render(f"TIME: {int(remaining_time)}", True, 
                                              self.game.RED if remaining_time < 5 else self.game.WHITE)
         self.screen.blit(timer_text, (self.screen_width // 2 - timer_text.get_width() // 2, 10))
@@ -101,7 +99,6 @@ class HackingMiniGame:
                 text = self.game.font.render(char, True, self.game.WHITE)
                 self.screen.blit(text, (x + 10, y + 10))
         
-        # Input buffer
         input_text = self.game.font.render("".join(self.input_buffer), True, self.game.WHITE)
         input_rect = input_text.get_rect(center=(self.screen_width // 2, start_y + (self.grid_size * cell_size) + 50))
         self.screen.blit(input_text, input_rect)
@@ -135,9 +132,8 @@ class HackingMiniGame:
         self.game.wait_for_keypress()
 
     def run(self):
-        """Main minigame loop"""
         self.show_instructions()
-        # Reset timer so that it starts after the instructions are dismissed.
+        # Reset timer so that it starts after the instructions are dismissed
         self.start_time = pygame.time.get_ticks() / 1000
         success = False
         running = True
@@ -148,19 +144,16 @@ class HackingMiniGame:
             elapsed = current_time - self.start_time
             remaining = self.time_limit - elapsed
 
-            # Handle timeout
             if remaining <= 0:
                 running = False
                 success = False
             
-            # Event handling
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     quit()
                 
                 if event.type == pygame.KEYDOWN:
-                    # Navigation
                     if event.key == pygame.K_UP:
                         self.selected_row = max(0, self.selected_row - 1)
                     elif event.key == pygame.K_DOWN:
@@ -176,7 +169,7 @@ class HackingMiniGame:
                             char = self.grid[self.selected_row][self.selected_col]
                             self.input_buffer.append(char)
                     
-                    # Deletion
+                    # Deleting
                     elif event.key == pygame.K_DELETE:
                         if self.input_buffer:
                             self.input_buffer.pop()
