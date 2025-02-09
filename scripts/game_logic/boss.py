@@ -19,7 +19,7 @@ class Boss:
         self.width, self.height = self.base_image.get_size()
         self.x = (game.screen_width - self.width) // 2
         self.y = 100
-        self.speed = 3  # used as a base speed for movement
+        self.speed = 3  
         self.health = 100
         self.max_health = 100
         self.last_shot_time = 0
@@ -27,7 +27,7 @@ class Boss:
         self.last_animation_time = 0
         self.animation_toggle = False
         
-        # Save initial positions/stats so you can reset if needed
+        # Save initial positions/stats so it can be reset if needed
         self.initial_x = self.x
         self.initial_y = self.y
         self.initial_speed = self.speed
@@ -38,21 +38,18 @@ class Boss:
         self.name = "VIRUS"
         self.minigame_triggered = False
 
-        # For movement that needs a stored horizontal velocity
         self.dx = self.speed
 
-        # For erratic (phase 5) movement: target position and time
         self.target_pos = (self.x, self.y)
         self.last_target_update = pygame.time.get_ticks()
 
-        # New attributes for the multi–phase AI:
-        self.phase = 1  # Phases 1 to 5
-        # Adjustable shooting intervals (in seconds) for each phase:
-        self.phase1_shoot_interval = 0.15  # Phase 1: Line attack (100%-81%)
-        self.phase2_shoot_interval = 0.1  # Phase 2: Spread attack (80%-61%)
-        self.phase3_shoot_interval = 0.5  # Phase 3: Aimed attack (60%-41%)
-        self.phase4_shoot_interval = 0.07  # Phase 4: Circle attack (40%-21%)
-        self.phase5_shoot_interval = 0.5  # Phase 5: Virus explosion attack (20%-0%)
+        # New attributes for new AI:
+        self.phase = 1  
+        self.phase1_shoot_interval = 0.15 
+        self.phase2_shoot_interval = 0.1  
+        self.phase3_shoot_interval = 0.5  
+        self.phase4_shoot_interval = 0.07  
+        self.phase5_shoot_interval = 0.5  
 
     def load_and_scale_image(self, filename, size):
         try:
@@ -65,17 +62,10 @@ class Boss:
             quit()
 
     def update(self):
-        # Update phase according to current health.
         self.update_phase()
-        # Update movement based on phase.
         self.perform_movement()
-        # Fire attacks based on phase.
-        self.attack_pattern()
-        # Update virus bullets (if any) so they can explode.
         self.update_virus_bullets()
-        # Check for collisions with player bullets.
         self.check_hit_by_player()
-        # Draw the boss and its health bar.
         self.draw()
 
     def update_phase(self):
@@ -107,7 +97,6 @@ class Boss:
             self.movement_phase5()
 
     def movement_phase1(self):
-        # Simple horizontal movement between preset boundaries.
         x_min = 50
         x_max = self.game.screen_width - self.width - 50
         self.x += self.dx
@@ -116,7 +105,6 @@ class Boss:
             self.x += self.dx
 
     def movement_phase2(self):
-        # Horizontal movement similar to phase 1 with a sine-based vertical oscillation.
         x_min = 50
         x_max = self.game.screen_width - self.width - 50
         self.x += self.dx
@@ -128,34 +116,29 @@ class Boss:
         self.y = base_y + amplitude * math.sin(pygame.time.get_ticks() / 1000.0)
 
     def movement_phase3(self):
-        # Boss “aims” at the player but with smoothing.
+        # Boss aims at the player but with smoothing.
         target_x = self.game.player.x + self.game.player.width/2 - self.width/2
-        # Calculate a fraction of the difference to move smoothly.
         dx = (target_x - self.x) * 0.05
-        # Limit the maximum movement per update.
         if dx > self.speed:
             dx = self.speed
         elif dx < -self.speed:
             dx = -self.speed
         self.x += dx
-        # Vertical oscillation (set movement, not pure reaction).
         base_y = 100
         amplitude = 20
         self.y = base_y + amplitude * math.sin(pygame.time.get_ticks() / 1000.0)
 
     def movement_phase4(self):
-        # Zigzag movement: use time–based sine functions for both x and y.
-        period = 3000  # period in milliseconds
+        period = 3000  
         t = pygame.time.get_ticks() % period
         x_min = 50
         x_max = self.game.screen_width - self.width - 50
         sine_val = math.sin(2 * math.pi * t / period)
         self.x = x_min + (x_max - x_min) * (sine_val + 1) / 2
-        # Vertical oscillation between 50 and 150.
         self.y = 50 + (150 - 50) * ((math.sin(2 * math.pi * t / period + math.pi/4) + 1) / 2)
 
     def movement_phase5(self):
-        # Erratic movement: update a target position every 2 seconds, then smoothly move toward it.
+        # Erratic movement: update a target position then move toward it.
         current_time = pygame.time.get_ticks()
         if current_time - self.last_target_update > 2000:
             x_min = 50
@@ -205,19 +188,16 @@ class Boss:
             return
         self.last_shot_time = current_time
 
-        # Compute the boss's firing point (center-bottom of the boss image)
         boss_center_x = self.x + self.width / 2
         boss_bottom_y = self.y + self.height
 
-        # Choose a random angle between -22.5° and +22.5° (relative to straight down)
+        #choose a random angle to fire at
         angle = random.uniform(-90, 90)
         rad = math.radians(angle)
     
-        # Calculate bullet velocity components; when angle=0, bullet goes straight down
-        dx = math.sin(rad) * 3  # Horizontal component
-        dy = math.cos(rad) * 3  # Vertical component
+        dx = math.sin(rad) * 3 
+        dy = math.cos(rad) * 3  
 
-        # Fire a single bullet
         self.game.bullet_manager.add_boss_bullet(boss_center_x, boss_bottom_y, dx, dy)
 
     def phase3_attack(self):
@@ -277,7 +257,6 @@ class Boss:
 
         for bullet in self.game.bullet_manager.boss_bullets[:]:
             if isinstance(bullet, dict) and bullet.get("type") == "virus":
-                # Update its position
                 bullet["y"] += bullet["dy"]
 
                 if bullet["y"] >= (500):
@@ -304,7 +283,7 @@ class Boss:
         """
         if not self.rage_mode:
             self.rage_mode = True
-            self.speed *= 1.5  # Increase base movement speed
+            self.speed *= 1.5  
             self.phase1_shoot_interval *= 0.5
             self.phase2_shoot_interval *= 0.5
             self.phase3_shoot_interval *= 0.5
@@ -313,7 +292,6 @@ class Boss:
 
     # ─── DRAWING METHODS ─────────────────────────────────────────────
     def draw(self):
-        # Handle image animation (flip periodically)
         current_time = time.time()
         if current_time - self.last_animation_time >= self.animation_interval:
             self.animation_toggle = not self.animation_toggle
@@ -349,7 +327,6 @@ class Boss:
                     self.game.change_music(self.game.boss_defeated_music)
                     self.game.display_feedback("Boss Defeated!", self.game.GREEN)
                     self.game.end_game_screen()
-                # Trigger the minigame (or rage mode) once when health is low.
                 elif self.health <= 50 and not self.rage_mode and not self.minigame_triggered:
                     success = HackingMiniGame(self.game).run()
                     if not success:
