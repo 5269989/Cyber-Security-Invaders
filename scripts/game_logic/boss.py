@@ -69,7 +69,7 @@ class Boss:
         self.draw()
 
     def update_phase(self):
-        """Determine the current phase based on the percentage of remaining health."""
+        # Determine the current phase based on the percentage of remaining health
         health_percent = (self.health / self.max_health) * 100
         if health_percent > 80:
             self.phase = 1
@@ -84,7 +84,7 @@ class Boss:
 
     # ─── MOVEMENT PATTERNS ─────────────────────────────────────────────
     def perform_movement(self):
-        """Call the movement routine for the current phase."""
+        # Call the movement routine for the current phase
         if self.phase == 1:
             self.movement_phase1()
         elif self.phase == 2:
@@ -159,7 +159,7 @@ class Boss:
 
     # ─── ATTACK PATTERNS ─────────────────────────────────────────────
     def attack_pattern(self):
-        """Select and execute an attack based on the current phase."""
+        # Select and execute an attack based on the current phase
         if self.phase == 1:
             self.phase1_attack()
         elif self.phase == 2:
@@ -172,7 +172,7 @@ class Boss:
             self.phase5_attack()
 
     def phase1_attack(self):
-        """Phase 1: Fire a bullet straight down."""
+        # Phase 1: Fire a bullet straight down
         current_time = time.time()
         if current_time - self.last_shot_time < self.phase1_shoot_interval:
             return
@@ -182,7 +182,7 @@ class Boss:
         )
 
     def phase2_attack(self):
-        """Phase 2: Spread attack – continuously fire a single bullet with a random angle in a 45° cone (relative to straight down)."""
+        # Phase 2: Spread attack – continuously fire a single bullet with a random angle in a 45° cone (relative to straight down)
         current_time = time.time()
         if current_time - self.last_shot_time < self.phase2_shoot_interval:
             return
@@ -191,7 +191,7 @@ class Boss:
         boss_center_x = self.x + self.width / 2
         boss_bottom_y = self.y + self.height
 
-        #choose a random angle to fire at
+        # choose a random angle to fire at
         angle = random.uniform(-90, 90)
         rad = math.radians(angle)
     
@@ -201,7 +201,7 @@ class Boss:
         self.game.bullet_manager.add_boss_bullet(boss_center_x, boss_bottom_y, dx, dy)
 
     def phase3_attack(self):
-        """Phase 3: Aim at the player with a little inaccuracy."""
+        # Phase 3: Aim at the player with a little inaccuracy
         current_time = time.time()
         if current_time - self.last_shot_time < self.phase3_shoot_interval:
             return
@@ -220,7 +220,7 @@ class Boss:
         )
 
     def phase4_attack(self):
-        """Phase 4: Circle attack firing a bullet in a random direction."""
+        # Phase 4: Circle attack firing a bullet in a random direction
         current_time = time.time()
         if current_time - self.last_shot_time < self.phase4_shoot_interval:
             return
@@ -234,7 +234,7 @@ class Boss:
         )
 
     def phase5_attack(self):
-        """Phase 5: Virus explosion attack – fires a virus bullet that explodes halfway to the player."""
+        # Phase 5: Virus explosion attack – fires a virus bullet that explodes halfway to the player
         current_time = time.time()
         if current_time - self.last_shot_time < self.phase5_shoot_interval:
             return
@@ -251,7 +251,7 @@ class Boss:
         self.game.bullet_manager.boss_bullets.append(virus_bullet)
 
     def update_virus_bullets(self):
-        """Update virus bullets and trigger their explosion when they reach the threshold."""
+        # Update virus bullets and trigger their explosion when they reach the threshold
 
         explosion_threshold = (5000)
 
@@ -264,7 +264,7 @@ class Boss:
                     self.game.bullet_manager.boss_bullets.remove(bullet)
 
     def explode_virus(self, bullet):
-        """Explode the virus bullet into several bullets in a circular pattern."""
+        #Explode the virus bullet into several bullets in a circular pattern
         x, y = bullet["x"], bullet["y"]
         for angle in range(0, 360, 45):
             rad = math.radians(angle)
@@ -274,13 +274,9 @@ class Boss:
 
     # ─── RAGE MODE ─────────────────────────────────────────────
     def enable_rage_mode(self):
-        """
-        When called (for example, if the player loses the minigame),
-        the boss goes into rage mode:
-         - Movement speed increases by 15%
-         - Shooting intervals decrease by 15% (i.e. shooting faster)
-         - The health bar displays a red "(Rage Mode)" next to its name.
-        """
+        # When called (for example, if the player loses the minigame), the boss goes into rage mode:
+        # Movement speed increases by 15%
+        # Shooting intervals decrease by 15% (i.e. shooting faster)
         if not self.rage_mode:
             self.rage_mode = True
             self.speed *= 1.5  
@@ -317,7 +313,7 @@ class Boss:
             self.game.screen.blit(rage_text, (name_x + name_text.get_width() + 10, 10))
 
     def check_hit_by_player(self):
-        """Check for collision with player bullets and update health."""
+        # Check for collision with player bullets and update health
         for bullet in self.game.bullet_manager.player_bullets[:]:
             if (self.x < bullet[0] < self.x + self.width and 
                 self.y < bullet[1] < self.y + self.height):
@@ -341,7 +337,7 @@ class Boss:
         self.minigame_triggered = True
         
     def reset_boss(self):
-        """Reset the boss to its initial state."""
+        # Reset the boss to its initial state
         self.x = self.initial_x
         self.y = self.initial_y
         self.health = 100
