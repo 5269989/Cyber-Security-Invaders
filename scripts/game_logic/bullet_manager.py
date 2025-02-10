@@ -83,7 +83,7 @@ class BulletManager:
                 self.enemy_bullets.remove(bullet)
                 
     def update_boss_bullets(self, draw_only=False):
-        """Updates or draws boss bullets, depending on the draw_only flag."""
+        # Updates or draws boss bullets, depending on the draw_only flag
         for bullet in self.boss_bullets[:]:
             if isinstance(bullet, dict) and bullet.get("type") == "virus":
                 if not draw_only:
@@ -108,7 +108,7 @@ class BulletManager:
                                  (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
 
             else:
-                print("WARNING: Skipping invalid bullet:", bullet)
+                print("WARNING: Skipping invalid bullet:", bullet) #Debug
                 self.boss_bullets.remove(bullet)
 
     def check_player_hit(self):
