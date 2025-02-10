@@ -1,0 +1,4 @@
+pygame==2.5.2
+requests==2.31.0
+RPi.GPIO==0.7.1  # Only needed if running on Raspberry Pi
+mfrc522==1.0.9  # Only needed if using RFID on Raspberry Pi
