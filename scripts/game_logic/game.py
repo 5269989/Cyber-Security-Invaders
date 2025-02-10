@@ -17,7 +17,6 @@ from scripts.game_logic.powerup_manager import PowerUpManager
 from scripts.game_logic.minigame import HackingMiniGame
 
 def get_asset_path(*path_parts):
-    """Returns the absolute path for an asset based on the project root."""
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", *path_parts))
 
 class Game:
