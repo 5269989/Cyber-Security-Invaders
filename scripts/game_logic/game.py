@@ -17,6 +17,7 @@ from scripts.game_logic.powerup_manager import PowerUpManager
 from scripts.game_logic.minigame import HackingMiniGame
 
 def get_asset_path(*path_parts):
+    """Returns the absolute path for an asset based on the project root."""
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", *path_parts))
 
 class Game:
@@ -223,9 +224,6 @@ class Game:
 
         else:
             print("Not running on RPi, GPIO functionality disabled.")
-            
-
-
   
     def load_sounds(self):
         """Loads game sound effects and background music safely."""
@@ -429,10 +427,8 @@ class Game:
 
     def check_minigame_trigger(self):
         if self.boss.health <= (self.boss.max_health // 2) and not self.boss.minigame_triggered:
-            self.boss.minigame_triggered = True 
             success = HackingMiniGame(self).run()
             if not success:
-                self.boss.shoot_interval *= 0.8
                 self.boss.rage_mode = True
                 self.display_feedback("BOSS ENRAGED!", self.RED)
             else:
@@ -725,6 +721,8 @@ class Game:
         self.clear_bullets()
         self.power_ups.reset_power_up()
         self.boss.health = self.boss.max_health
+        self.boss.reset_boss()
+        self.boss.minigame_triggered = False
         
         self.screen.fill(self.BLACK)
         boss_fight_text = self.bold_font.render("Boss Fight!", True, self.RED)
@@ -915,6 +913,8 @@ class Game:
             'name': name,
             'level': "BOSS" if self.boss_fight else self.level,
             'boss_fight': self.boss_fight,
+            'minigame_trigger': self.boss.minigame_triggered,
+            'boss_ragemode': self.boss.rage_mode,
             'score': self.score,
             'questions_asked': self.questions_asked,
             'asked_questions': self.asked_questions,
@@ -1021,6 +1021,8 @@ class Game:
         # Restore core state
         self.level = save_data['level']
         self.boss_fight = save_data['boss_fight']
+        self.boss.minigame_triggered =  save_data['minigame_trigger']
+        self.boss.rage_mode = save_data['boss_ragemode']
         self.score = save_data['score']
         self.questions_asked = save_data['questions_asked']
         self.asked_questions = save_data['asked_questions']
@@ -1148,6 +1150,7 @@ class Game:
     def show_instructions(self):
         self.screen.fill(self.BLACK)
     
+        # Title
         title = self.big_font.render("Instructions", True, self.YELLOW)
         title_x = self.screen_width // 2 - title.get_width() // 2
         self.screen.blit(title, (title_x, 20))
@@ -1157,12 +1160,13 @@ class Game:
             ("Controls", "Use arrow keys to move, Spacebar to shoot"),
             ("Objective", "Survive waves of cyber enemies by shooting them down"),
             ("Health", "Lose lives when hit; answer questions to mitigate damage"),
-            ("Levels", f"Progress through {self.total_levels} levels to face the Boss"),
-            ("Scoring", "Score decreases over time but increases with hits"),
-            ("Boss Fight", "Answer questions correctly to defeat the boss"),
-            ("Game Over", "Game ends when lives reach zero or if you defeat the Boss")
+            ("Levels", f"Complete {self.total_levels} levels to face the Boss"),
+            ("Scoring", "Score decreases over time but increases with powerups"),
+            ("Boss Fight", "Answer questions correctly to regain lives"),
+            ("Game Over", "You lose when lives reach zero")
         ]
 
+        # Layout for instructions
         y_pos = 80
         for title, content in instructions:
             title_text = self.font.render(title + ":", True, self.RED)
@@ -1184,7 +1188,8 @@ class Game:
             ("Triple Shot", self.GREEN, "Shoot three bullets at once")
         ]
     
-        power_up_y = y_pos + 50  
+        # Calculate starting position for power-ups
+        power_up_y = y_pos + 50  # Space for title
         for name, color, effect in power_ups:
             name_text = self.font.render(f"- {name}", True, color)
             effect_text = self.font.render(effect, True, self.WHITE)
@@ -1193,6 +1198,7 @@ class Game:
             self.screen.blit(effect_text, (name_x + name_text.get_width() + 5, power_up_y))
             power_up_y += name_text.get_height() + 5
 
+        # Navigation
         back_text = self.font.render("Press any key to go back", True, self.GREEN)
         back_x = self.screen_width // 2 - back_text.get_width() // 2
         self.screen.blit(back_text, (back_x, self.screen_height - 40))
