@@ -56,11 +56,14 @@ class HackingMiniGame:
             "Press ENTER to select letters",
             "Press DEL to remove letters",
             f"Max {len(self.correct_word)} letters, Time limit: {self.time_limit}s",
+            f"Find the hidden word: {self.correct_word}",
             "Success: Boss remains normal",
             "Failure: Boss enters rage mode!",
             "Press any key to start..."
         ]
         
+        
+
         y = 200
         for line in instructions:
             text = self.game.font.render(line, True, self.game.WHITE)
@@ -84,7 +87,8 @@ class HackingMiniGame:
         cell_size = 40
         start_x = (self.screen_width - (self.grid_size * cell_size)) // 2
         start_y = (self.screen_height - (self.grid_size * cell_size)) // 2
-        
+                
+
         for row in range(self.grid_size):
             for col in range(self.grid_size):
                 x = start_x + col * cell_size
@@ -107,6 +111,10 @@ class HackingMiniGame:
         status_color = self.game.RED if len(self.input_buffer) >= len(self.correct_word) else self.game.WHITE
         status_text = self.game.font.render(f"Letters: {len(self.input_buffer)}/{len(self.correct_word)}", True, status_color)
         self.screen.blit(status_text, (self.screen_width // 2 - 100, input_rect.bottom + 10))
+        
+        word_text = self.game.font.render(f"Target Word: {self.correct_word}", True, self.game.GREEN)
+        self.screen.blit(word_text, (self.screen_width//2 - word_text.get_width()//2, start_y - 50))
+        pygame.display.flip()
 
     def show_result(self, success):
         """Show win/lose result screen"""
