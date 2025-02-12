@@ -249,7 +249,7 @@ class Game:
 
 
         #Set volume 
-        pygame.mixer.music.set_volume(0.8)
+        pygame.mixer.music.set_volume(0.3)
 
     def load_menu_background(self):
         # Load animated menu backgrounds
