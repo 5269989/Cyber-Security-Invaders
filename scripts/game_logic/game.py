@@ -29,7 +29,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.game_over = False
         self.level = 1
-        self.total_levels = 2
+        self.total_levels = 4
         self.boss_fight = False
         self.question_limit = 3
         self.questions_asked = 0
@@ -260,7 +260,7 @@ class Game:
         ]
         self.menu_background_index = 0 
         self.last_bg_update = time.time()  
-        self.bg_animation_interval = 1  # Change background every 0.2 seconds
+        self.bg_animation_interval = 1  
 
     def start_display_thread(self):
         self.display_running = True 
@@ -927,6 +927,8 @@ class Game:
             },
             'enemies': self.enemy_manager.enemies,
             'enemy_direction': self.enemy_manager.direction,
+            'enemy_speed': self.enemy_manager.enemy_speed,
+            'enemy_shotprob': self.enemy_manager.shoot_prob,
             'boss_health': self.boss.health if self.boss_fight else None,
             'player_bullets': [(b[0], b[1], b[2], b[3]) for b in self.bullet_manager.player_bullets],
             'enemy_bullets': [(b[0], b[1]) for b in self.bullet_manager.enemy_bullets],
@@ -1037,6 +1039,8 @@ class Game:
         # Restore enemies exactly as saved
         self.enemy_manager.enemies = save_data['enemies'] if save_data['enemies'] else []
         self.enemy_manager.direction = save_data['enemy_direction']
+        self.enemy_manager.enemy_speed = save_data['enemy_speed']
+        self.enemy_manager.shoot_prob = save_data['enemy_shotprob']
 
         # Restore boss
         if self.boss_fight:
