@@ -37,6 +37,7 @@ class EnemyManager:
                 self.game.level += 1
                 self.game.level_up_sound.play()
                 self.game.display_feedback(f"Level {self.game.level - 1} Complete!", self.game.GREEN)
+                self.increase_difficulty()
                 self.game.clear_level()
                 self.create_enemies()
             else:
