@@ -44,33 +44,33 @@ class HackingMiniGame:
 
     def show_instructions(self):
         self.screen.fill(self.game.BLACK)
-        
         title = self.game.bold_font.render("HACKING MINIGAME", True, self.game.GREEN)
         title_rect = title.get_rect(center=(self.screen_width // 2, 100))
         self.screen.blit(title, title_rect)
-        
-        # Instructions (with dynamic max letters)
+
+        # Instructions with color parts
         instructions = [
-            "Find the hidden security word in the grid!",
-            "Use arrow keys to navigate",
-            "Press ENTER to select letters",
-            "Press DEL to remove letters",
-            f"Max {len(self.correct_word)} letters, Time limit: {self.time_limit}s",
-            f"Find the hidden word: {self.correct_word}",
-            "Success: Boss remains normal",
-            "Failure: Boss enters rage mode!",
-            "Press any key to start..."
+            [("Find the hidden security word in the grid!", self.game.WHITE)],
+            [("Use arrow keys to navigate", self.game.WHITE)],
+            [("Press ", self.game.WHITE), ("ENTER", self.game.LIGHTBLUE), (" to select letters", self.game.WHITE)],
+            [("Press ", self.game.WHITE), ("DEL", self.game.RED), (" to remove letters", self.game.WHITE)],
+            [(f"Max {len(self.correct_word)} letters, Time limit: {self.time_limit}s", self.game.WHITE)],
+            [("Find the hidden word: ", self.game.WHITE), (self.correct_word, self.game.GREEN)],
+            [(" ", self.game.WHITE)],
+            [("Press any key to start...", self.game.YELLOW)]
         ]
-        
-        
 
         y = 200
         for line in instructions:
-            text = self.game.font.render(line, True, self.game.WHITE)
-            text_rect = text.get_rect(center=(self.screen_width // 2, y))
-            self.screen.blit(text, text_rect)
+            total_width = sum(self.game.font.size(part[0])[0] for part in line)
+            start_x = (self.screen_width - total_width) // 2
+            x_offset = 0
+            for part_text, part_color in line:
+                text_surface = self.game.font.render(part_text, True, part_color)
+                self.screen.blit(text_surface, (start_x + x_offset, y))
+                x_offset += text_surface.get_width()
             y += 40
-            
+
         pygame.display.flip()
         self.game.wait_for_keypress()
 
