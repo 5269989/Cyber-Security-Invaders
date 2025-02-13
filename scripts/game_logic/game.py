@@ -937,9 +937,10 @@ class Game:
             'questions_asked': self.questions_asked,
             'asked_questions': self.asked_questions,
             'player_barricades': [
-                [{'x': block['rect'].x, 'y': block['rect'].y} for block in barricade.blocks]
+                [{'x': block['rect'].x, 'y': block['rect'].y} for block in barricade]
                 for barricade in self.barricade_manager.barricades
             ],
+
             'player': {
                 'lives': self.player.lives,
                 'x': self.player.x,
