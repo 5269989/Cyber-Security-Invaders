@@ -15,9 +15,9 @@ from scripts.game_logic.enemy_manager import EnemyManager
 from scripts.game_logic.bullet_manager import BulletManager
 from scripts.game_logic.powerup_manager import PowerUpManager
 from scripts.game_logic.minigame import HackingMiniGame
+from scripts.game_logic.barricade_manager import BarricadeManager
 
 def get_asset_path(*path_parts):
-    """Returns the absolute path for an asset based on the project root."""
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", *path_parts))
 
 class Game:
@@ -34,6 +34,7 @@ class Game:
         self.question_limit = 3
         self.questions_asked = 0
         self.asked_questions = []
+        self.barricade_manager = BarricadeManager(self)
         self.last_hit_time = 0
         self.hit_duration = 1.5
         self.start_time = 0
@@ -395,6 +396,8 @@ class Game:
                         score_paused = False
 
             else:
+                self.barricade_manager.update() 
+                self.barricade_manager.draw()
                 self.enemy_manager.update()
                 self.enemy_manager.draw()
                 player_hit = self.bullet_manager.check_player_hit()
@@ -878,6 +881,21 @@ class Game:
                                     print(f"Error deleting save: {e}")
         
             pygame.display.flip()
+
+    def draw(self, screen):
+        for block in self.blocks:
+            # You can change color based on health if desired
+            pygame.draw.rect(screen, (0, 255, 0), block["rect"])
+
+    def hit(self, pos):
+        # pos is a tuple (x, y)
+        for block in self.blocks:
+            if block["rect"].collidepoint(pos):
+                block["health"] -= 1
+                if block["health"] <= 0:
+                    self.blocks.remove(block)
+                return True
+        return False
             
     def confirm_delete_save(self):
         # Confirmation screen
@@ -918,6 +936,10 @@ class Game:
             'score': self.score,
             'questions_asked': self.questions_asked,
             'asked_questions': self.asked_questions,
+            'player_barricades': [
+                [{'x': block['rect'].x, 'y': block['rect'].y} for block in barricade.blocks]
+                for barricade in self.barricade_manager.barricades
+            ],
             'player': {
                 'lives': self.player.lives,
                 'x': self.player.x,
@@ -1028,6 +1050,7 @@ class Game:
         self.score = save_data['score']
         self.questions_asked = save_data['questions_asked']
         self.asked_questions = save_data['asked_questions']
+        self.barricade_manager.create_barricades(saved_state=save_data.get('player_barricades', None))
 
         # Restore player
         self.player.lives = save_data['player']['lives']
@@ -1149,66 +1172,113 @@ class Game:
         self.clear_bullets()
         self.power_ups.reset_power_up()  
         self.power_ups.spawn_time = time.time()  
-        self.power_ups.spawn_power_up()  
+        self.power_ups.spawn_power_up()
+        self.barricade_manager.reset()
 
     def show_instructions(self):
-        self.screen.fill(self.BLACK)
-    
-        # Title
-        title = self.big_font.render("Instructions", True, self.YELLOW)
-        title_x = self.screen_width // 2 - title.get_width() // 2
-        self.screen.blit(title, (title_x, 20))
-
-        # Instructions
-        instructions = [
-            ("Controls", "Use arrow keys to move, Spacebar to shoot"),
-            ("Objective", "Survive waves of cyber enemies by shooting them down"),
-            ("Health", "Lose lives when hit; answer questions to mitigate damage"),
-            ("Levels", f"Complete {self.total_levels} levels to face the Boss"),
-            ("Scoring", "Score decreases over time but increases with powerups"),
-            ("Boss Fight", "Answer questions correctly to regain lives"),
-            ("Game Over", "You lose when lives reach zero")
+        instructions_pages = [
+            {
+                "title": "Objectives",
+                "text": [
+                    "Use LEFT/RIGHT arrow keys to move your firewall",
+                    "Press SPACE to deploy security packets (shoot)",
+                    "Destroy all incoming malware to progress",
+                    f"Survive through {self.total_levels} levels to reach the final boss",
+                    "Collect power-ups to enhance your defenses"
+                ],
+                "image": "controls_image.png"
+            },
+            {
+                "title": "Power-Ups",
+                "text": [
+                    "Pick up blue orbs to obtain a powerup for 5 seconds",
+                    "Laser (Red) - Enhanced firewall throughput",
+                    "Shield (Blue) - Temporary intrusion protection",
+                    "TripleShot (Green) - Multi-vector defense system"
+                ],
+                "image": "powerups_image.png"
+            },
+            {
+                "title": "Cybersecurity Questions",
+                "text": [
+                    "You'll get security questions when hit",
+                    "Correct answers restore system integrity",
+                    "3 wrong answers compromise your network",
+                    "Questions test real security knowledge"
+                ],
+                "image": "questions_image.png"
+            },
+            {
+                "title": "Boss Fight",
+                "text": [
+                    "Final confrontation with APT (Advanced Persistent Threat)",
+                    "Use hacking minigame to weaken defenses",
+                    "Prevent rage mode activation",
+                    "Destroy core systems to win"
+                ],
+                "image": "boss_image.png"
+            }
         ]
 
-        # Layout for instructions
-        y_pos = 80
-        for title, content in instructions:
-            title_text = self.font.render(title + ":", True, self.RED)
-            content_text = self.font.render(content, True, self.WHITE)
-            title_x = self.screen_width // 2 - (title_text.get_width() + content_text.get_width() + 5) // 2
-            self.screen.blit(title_text, (title_x, y_pos))
-            self.screen.blit(content_text, (title_x + title_text.get_width() + 5, y_pos))
-            y_pos += title_text.get_height() + 5
-
-        # Power-ups title
-        power_ups_title = self.font.render("Power-ups:", True, self.RED)
-        power_ups_title_x = self.screen_width // 2 - power_ups_title.get_width() // 2
-        self.screen.blit(power_ups_title, (power_ups_title_x, y_pos + 20))
-    
-        # Power-ups explanation
-        power_ups = [
-            ("Laser", self.RED, "Longer, faster, and more frequent shots"),
-            ("Shield", (self.LIGHTBLUE), "Temporary invulnerability"),
-            ("Triple Shot", self.GREEN, "Shoot three bullets at once")
-        ]
-    
-        # Calculate starting position for power-ups
-        power_up_y = y_pos + 50  # Space for title
-        for name, color, effect in power_ups:
-            name_text = self.font.render(f"- {name}", True, color)
-            effect_text = self.font.render(effect, True, self.WHITE)
-            name_x = self.screen_width // 2 - (name_text.get_width() + effect_text.get_width() + 5) // 2
-            self.screen.blit(name_text, (name_x, power_up_y))
-            self.screen.blit(effect_text, (name_x + name_text.get_width() + 5, power_up_y))
-            power_up_y += name_text.get_height() + 5
-
-        # Navigation
-        back_text = self.font.render("Press any key to go back", True, self.GREEN)
-        back_x = self.screen_width // 2 - back_text.get_width() // 2
-        self.screen.blit(back_text, (back_x, self.screen_height - 40))
-
-        pygame.display.flip()
-        self.wait_for_keypress()
+        current_page = 0
+        running = True
+        while running:
+            self.screen.fill(self.BLACK)
+        
+            # Get current page data
+            page = instructions_pages[current_page]
+        
+            # Draw title
+            title_text = self.bold_font.render(page["title"], True, self.YELLOW)
+            title_rect = title_text.get_rect(center=(self.screen_width//2, 50))
+            self.screen.blit(title_text, title_rect)
+        
+            # Load and draw image
+            try:
+                image_path = os.path.join("assets", "ui", page["image"])
+                image = pygame.image.load(image_path)
+                image = pygame.transform.scale(image, (600, 270))
+                image_rect = image.get_rect(center=(self.screen_width//2, 225))
+                self.screen.blit(image, image_rect)
+            except Exception as e:
+                print(f"Error loading instruction image: {e}")
+        
+            # Draw text
+            text_y = 370
+            for line in page["text"]:
+                rendered_line = self.font.render(line, True, self.WHITE)
+                self.screen.blit(rendered_line, 
+                               (self.screen_width//2 - rendered_line.get_width()//2, text_y))
+                text_y += 35
+        
+            # Draw page navigation
+            page_text = self.font.render(
+                f"Page {current_page + 1} of {len(instructions_pages)}", 
+                True, self.GREEN
+            )
+            self.screen.blit(page_text, (self.screen_width//2 - page_text.get_width()//2, 550))
+        
+            # Draw navigation help
+            nav_text = self.font.render(
+                "<-> : Navigate Pages | ESC: Return to Menu",
+                True, self.LIGHTBLUE
+            )
+            self.screen.blit(nav_text, (self.screen_width//2 - nav_text.get_width()//2, 580))
+        
+            pygame.display.flip()
+        
+            # Handle input
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                    elif event.key == pygame.K_LEFT:
+                        current_page = max(0, current_page - 1)
+                    elif event.key == pygame.K_RIGHT:
+                        current_page = min(len(instructions_pages) - 1, current_page + 1)
 
     def reset_game(self):
         self.player.lives = 3
@@ -1232,6 +1302,7 @@ class Game:
         self.power_ups.current_power_up = None
         self.power_ups.power_ups = []
         self.power_ups.spawn_time = time.time()
+        self.barricade_manager.reset()
         # Ensure game does NOT start paused
         self.paused = False
         self.main_game_loop()
@@ -1241,6 +1312,7 @@ class Game:
         self.bullet_manager.player_bullets.clear()
         self.bullet_manager.enemy_bullets.clear()
         self.bullet_manager.boss_bullets.clear()
+        self.barricade_manager.reset()
         # Clear Enemies
         self.enemy_manager.enemies.clear()
         # Clear Power-Ups
@@ -1328,3 +1400,4 @@ class Game:
             self.display_feedback(f"Error: {str(e)}", self.RED)
     
         self.show_menu()
+
