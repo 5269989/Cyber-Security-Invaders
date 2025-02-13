@@ -1186,7 +1186,7 @@ class Game:
                     f"Survive through {self.total_levels} levels to reach the final boss",
                     "Collect power-ups to enhance your defenses"
                 ],
-                "image": "controls_image.png"
+                "image": "game_image.png"
             },
             {
                 "title": "Power-Ups",
