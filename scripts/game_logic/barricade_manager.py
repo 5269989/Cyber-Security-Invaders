@@ -11,7 +11,6 @@ class BarricadeManager:
         self.create_barricades()
 
     def create_barricades(self, saved_state=None):
-        """Builds barricades normally or restores them from saved game data."""
         self.barricades = []  # Clear any old barricades
         barricade_y = self.game.screen_height - 120
         barricade_width = self.cols * self.block_width
@@ -39,7 +38,6 @@ class BarricadeManager:
             self.barricades.append(blocks)
 
     def update(self):
-        """Handles bullet collisions with barricades."""
         for bullet in self.game.bullet_manager.enemy_bullets[:]:
             bullet_pos = (
                 bullet[0] + self.game.bullet_manager.bullet_width / 2,
@@ -63,11 +61,9 @@ class BarricadeManager:
                         break
 
     def draw(self):
-        """Draws the barricades."""
         for barricade in self.barricades:
             for block in barricade:
                 pygame.draw.rect(self.game.screen, (0, 255, 0), block["rect"])  # Always green
 
     def reset(self):
-        """Rebuilds barricades when a new level starts."""
         self.create_barricades()
