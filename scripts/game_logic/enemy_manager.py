@@ -69,3 +69,4 @@ class EnemyManager:
     def increase_difficulty(self):
         self.enemy_speed += 0.5
         self.shoot_prob += 0.001
+
