@@ -40,6 +40,8 @@ class BulletManager:
             return
 
     def update_player_bullets(self, draw_only=False):
+        if not draw_only:
+            self.check_bullet_collisions()
         bullets_to_remove = []
         for bullet in self.player_bullets[:]:
             x, y, height, angle = bullet
@@ -120,16 +122,82 @@ class BulletManager:
 
             elif isinstance(bullet, list) and len(bullet) == 4:
                 if not draw_only:
-                    # Update normal boss bullet (stored as a list)
                     bullet[0] += bullet[2]  # x += dx
                     bullet[1] += bullet[3]  # y += dy
 
-                # Draw normal boss bullet (yellow, same shape as player bullets)
-                pygame.draw.rect(self.game.screen, self.game.YELLOW, 
-                                 (bullet[0], bullet[1], self.bullet_width, self.enemy_bullet_height))
+                # Calculate angle in radians
+                angle = math.atan2(bullet[3], bullet[2])
+
+                # Bullet dimensions (keeping original proportions)
+                width = self.enemy_bullet_height
+                height =  self.bullet_width # This is now the bullet's "length"
+
+                # Center of the bullet
+                cx, cy = bullet[0] + width / 2, bullet[1] + height / 2
+
+                # Calculate rotated rectangle corners
+                cos_a = math.cos(angle)
+                sin_a = math.sin(angle)
+
+                half_w, half_h = width / 2, height / 2
+
+                points = [
+                    (cx - half_w * cos_a - half_h * sin_a, cy - half_w * sin_a + half_h * cos_a),  # Top-left
+                    (cx + half_w * cos_a - half_h * sin_a, cy + half_w * sin_a + half_h * cos_a),  # Top-right
+                    (cx + half_w * cos_a + half_h * sin_a, cy + half_w * sin_a - half_h * cos_a),  # Bottom-right
+                    (cx - half_w * cos_a + half_h * sin_a, cy - half_w * sin_a - half_h * cos_a)   # Bottom-left
+                ]
+
+                # Draw the rotated rectangle
+                pygame.draw.polygon(self.game.screen, self.game.YELLOW, points)
+
+                # Remove bullets that go off screen
+                if not draw_only and (cx < 0 or cx > self.game.screen_width or cy < 0 or cy > self.game.screen_height):
+                    self.boss_bullets.remove(bullet)
 
             else:
                 self.boss_bullets.remove(bullet)
+                
+    def check_bullet_collisions(self):
+        bullets_to_remove = []
+        collision_radius = 10  # Adjust for better hitbox size
+
+        # Check for collisions between player bullets and boss bullets
+        for p_bullet in self.player_bullets[:]:
+            px, py, _, _ = p_bullet  # Player bullet position
+
+            for b_bullet in self.boss_bullets[:]:
+                if isinstance(b_bullet, list) and len(b_bullet) == 4:
+                    bx, by, _, _ = b_bullet  # Normal boss bullet
+                elif isinstance(b_bullet, dict) and "x" in b_bullet and "y" in b_bullet:
+                    bx, by = b_bullet["x"], b_bullet["y"]  # Virus bullet dictionary
+                else:
+                    continue  # Skip invalid bullets
+
+                # Distance-based collision check
+                if math.hypot(px - bx, py - by) < collision_radius:
+                    # If this is a virus bullet, trigger its explosion before removing it
+                    if isinstance(b_bullet, dict) and b_bullet.get("type") == "virus":
+                        self.game.boss.explode_virus(b_bullet)
+                    bullets_to_remove.append((p_bullet, b_bullet))
+
+            # Check for collisions between player bullets and normal enemy bullets
+            for e_bullet in self.game.bullet_manager.enemy_bullets[:]:
+                ex, ey = e_bullet  # Enemy bullet position
+
+                if math.hypot(px - ex, py - ey) < collision_radius:
+                    bullets_to_remove.append((p_bullet, e_bullet))
+
+        # Remove collided bullets
+        for p_bullet, enemy_bullet in bullets_to_remove:
+            if p_bullet in self.player_bullets:
+                self.player_bullets.remove(p_bullet)
+            if enemy_bullet in self.boss_bullets:
+                self.boss_bullets.remove(enemy_bullet)
+            elif enemy_bullet in self.enemy_bullets:
+                self.enemy_bullets.remove(enemy_bullet)
+
+
 
     def check_player_hit(self):
         for bullet in self.enemy_bullets[:]:
@@ -148,7 +216,6 @@ class BulletManager:
     def check_player_hit_by_boss_bullet(self):
         for bullet in self.boss_bullets[:]:
             if not isinstance(bullet, list) or len(bullet) < 4:
-                print("WARNING: Skipping invalid bullet:", bullet)
                 continue  # Skip malformed bullets
         
             # Access bullet as a list
@@ -158,3 +225,4 @@ class BulletManager:
                     self.boss_bullets.remove(bullet)
                     return True
         return False
+    
