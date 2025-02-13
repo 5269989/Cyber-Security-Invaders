@@ -83,3 +83,5 @@ class Player:
             current_time = time.time()
             if current_time - self.invulnerable_timer >= self.invulnerable_duration:
                 self.invulnerable = False
+
+
