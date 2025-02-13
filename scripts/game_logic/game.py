@@ -1235,7 +1235,7 @@ class Game:
         
             # Load and draw image
             try:
-                image_path = os.path.join("assets", "ui", page["image"])
+                image_path = os.path.join("assets", "instructions", page["image"])
                 image = pygame.image.load(image_path)
                 image = pygame.transform.scale(image, (600, 270))
                 image_rect = image.get_rect(center=(self.screen_width//2, 225))
