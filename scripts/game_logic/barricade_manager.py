@@ -1,84 +1,73 @@
 import pygame
 
-class Barricade:
-    def __init__(self, x, y, block_width=15, block_height=10, cols=10, rows=4, saved_blocks=None):
-        self.blocks = []
-        if saved_blocks:  # If loading from save, restore the saved blocks
-            for block in saved_blocks:
-                block_rect = pygame.Rect(block["x"], block["y"], block_width, block_height)
-                self.blocks.append({"rect": block_rect})
-        else:  # Normal barricade creation
-            for row in range(rows):
-                for col in range(cols):
-                    block_rect = pygame.Rect(
-                        x + col * block_width,
-                        y + row * block_height,
-                        block_width,
-                        block_height
-                    )
-                    self.blocks.append({"rect": block_rect})
-
-    def draw(self, screen):
-        for block in self.blocks:
-            pygame.draw.rect(screen, (0, 255, 0), block["rect"])  # Always green
-
-    def hit(self, pos, is_player_bullet=False):
-        for block in self.blocks:
-            if block["rect"].collidepoint(pos):
-                if not is_player_bullet:
-                    self.blocks.remove(block)  # Enemy bullets remove the block
-                return True  # Bullet should always be removed
-        return False
-
 class BarricadeManager:
     def __init__(self, game):
         self.game = game
         self.barricades = []
+        self.block_width = 15
+        self.block_height = 10
+        self.cols = 10
+        self.rows = 4
         self.create_barricades()
 
     def create_barricades(self, saved_state=None):
+        """Builds barricades normally or restores them from saved game data."""
         self.barricades = []  # Clear any old barricades
         barricade_y = self.game.screen_height - 120
-        block_width = 15
-        cols = 10  
-        barricade_width = cols * block_width
+        barricade_width = self.cols * self.block_width
         positions = [
             self.game.screen_width // 3 - barricade_width // 2,
             2 * self.game.screen_width // 3 - barricade_width // 2
         ]
     
-        if saved_state:  # Restoring from save
-            for x, barricade_blocks in zip(positions, saved_state):
-                self.barricades.append(Barricade(x, barricade_y, block_width, 10, cols, 4, saved_blocks=barricade_blocks))
-        else:  # Creating new barricades
-            for x in positions:
-                self.barricades.append(Barricade(x, barricade_y, block_width, 10, cols, 4))
-
-
+        for x, saved_blocks in zip(positions, saved_state) if saved_state else [(x, None) for x in positions]:
+            blocks = []
+            if saved_blocks:  # Restoring from save
+                for block in saved_blocks:
+                    block_rect = pygame.Rect(block["x"], block["y"], self.block_width, self.block_height)
+                    blocks.append({"rect": block_rect})
+            else:  # Creating new barricades
+                for row in range(self.rows):
+                    for col in range(self.cols):
+                        block_rect = pygame.Rect(
+                            x + col * self.block_width,
+                            barricade_y + row * self.block_height,
+                            self.block_width,
+                            self.block_height
+                        )
+                        blocks.append({"rect": block_rect})
+            self.barricades.append(blocks)
 
     def update(self):
+        """Handles bullet collisions with barricades."""
         for bullet in self.game.bullet_manager.enemy_bullets[:]:
             bullet_pos = (
                 bullet[0] + self.game.bullet_manager.bullet_width / 2,
                 bullet[1] + self.game.bullet_manager.enemy_bullet_height / 2
             )
             for barricade in self.barricades:
-                if barricade.hit(bullet_pos, is_player_bullet=False):
-                    if bullet in self.game.bullet_manager.enemy_bullets:
-                        self.game.bullet_manager.enemy_bullets.remove(bullet)
-                    break
+                for block in barricade:
+                    if block["rect"].collidepoint(bullet_pos):
+                        barricade.remove(block)  # Enemy bullets remove the block
+                        if bullet in self.game.bullet_manager.enemy_bullets:
+                            self.game.bullet_manager.enemy_bullets.remove(bullet)
+                        break
 
         for bullet in self.game.bullet_manager.player_bullets[:]:
             bullet_pos = (bullet[0], bullet[1])
             for barricade in self.barricades:
-                if barricade.hit(bullet_pos, is_player_bullet=True):
-                    if bullet in self.game.bullet_manager.player_bullets:
-                        self.game.bullet_manager.player_bullets.remove(bullet)
-                    break
+                for block in barricade:
+                    if block["rect"].collidepoint(bullet_pos):
+                        if bullet in self.game.bullet_manager.player_bullets:
+                            self.game.bullet_manager.player_bullets.remove(bullet)
+                        break
 
     def draw(self):
+        """Draws the barricades."""
         for barricade in self.barricades:
-            barricade.draw(self.game.screen)
+            for block in barricade:
+                pygame.draw.rect(self.game.screen, (0, 255, 0), block["rect"])  # Always green
 
     def reset(self):
+        """Rebuilds barricades when a new level starts."""
         self.create_barricades()
