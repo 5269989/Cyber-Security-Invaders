@@ -355,14 +355,33 @@ class Boss:
         bar_width = 200
         health_width = int(bar_width * (self.health / self.max_health))
         bar_x = self.game.screen_width // 2 - bar_width // 2
+
+        # Draw health bar background (red) and current health (green)
         pygame.draw.rect(self.game.screen, self.game.RED, (bar_x, 40, bar_width, 20))
         pygame.draw.rect(self.game.screen, self.game.GREEN, (bar_x, 40, health_width, 20))
+
+        # Render "VIRUS" text
         name_text = self.game.font.render(self.name, True, self.game.YELLOW)
-        name_x = self.game.screen_width // 2 - name_text.get_width() // 2
-        self.game.screen.blit(name_text, (name_x, 10))
+    
+        # If in rage mode, render "(Rage Mode)" text
         if self.rage_mode:
             rage_text = self.game.font.render("(Rage Mode)", True, self.game.RED)
-            self.game.screen.blit(rage_text, (name_x + name_text.get_width() + 10, 10))
+
+            # Calculate total width of "VIRUS (Rage Mode)" combined
+            total_width = name_text.get_width() + 10 + rage_text.get_width()
+
+            # Center the full text combo above the health bar
+            name_x = self.game.screen_width // 2 - total_width // 2
+            rage_x = name_x + name_text.get_width() + 10  # Place "(Rage Mode)" after "VIRUS"
+
+            # Draw both texts
+            self.game.screen.blit(name_text, (name_x, 10))
+            self.game.screen.blit(rage_text, (rage_x, 10))
+        else:
+            # Just center "VIRUS" normally if not in rage mode
+            name_x = self.game.screen_width // 2 - name_text.get_width() // 2
+            self.game.screen.blit(name_text, (name_x, 10))
+
 
     def check_hit_by_player(self):
         """Check for collision with player bullets and update health."""
@@ -407,3 +426,4 @@ class Boss:
         self.phase3_shoot_interval = 0.5  
         self.phase4_shoot_interval = 0.07  
         self.phase5_shoot_interval = 1 
+        
