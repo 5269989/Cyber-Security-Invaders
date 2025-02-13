@@ -108,3 +108,5 @@ class PowerUpManager:
         self.game.bullet_manager.player_shoot_interval = 0.2  # Default shoot interval
         self.game.bullet_manager.triple_shot = False  # Disable TripleShot
         self.game.player.invulnerable = False  
+
+
